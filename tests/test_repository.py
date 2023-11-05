@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import pytest
 import pytest_asyncio
-from furiousapi.core.db.exceptions import EntityAlreadyExistsError
-from furiousapi.core.pagination import CursorPaginationParams
+from furiousapi.db import EntityAlreadyExistsError
+from furiousapi.api.pagination import CursorPaginationParams
 from sqlalchemy import Column, DateTime
 from sqlalchemy.exc import OperationalError
 
@@ -20,7 +20,7 @@ from tests.utils import get_first_doc_from_cache
 if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
     from _pytest.logging import LogCaptureFixture
-    from furiousapi.core.db.fields import SortableFieldEnum
+    from furiousapi.db.fields import SortableFieldEnum
 
     from sqlmodel.ext.asyncio.session import AsyncSession
 

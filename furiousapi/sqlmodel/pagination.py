@@ -19,10 +19,10 @@ from typing import (
 )
 
 import sqlalchemy as sa
-from furiousapi.core.api.error_details import BadRequestHttpErrorDetails
-from furiousapi.core.api.exceptions import FuriousAPIError
+from furiousapi.api.error_responses import BadRequestHttpErrorResponse
+from furiousapi.api.exceptions import FuriousAPIError
 from furiousapi.core.config import get_settings
-from furiousapi.core.db.pagination import (
+from furiousapi.db.pagination import (
     BaseCursorPagination,
     BaseRelayPagination,
     Cursor,
@@ -31,14 +31,14 @@ from furiousapi.core.db.pagination import (
     PaginatorMixin,
 )
 from furiousapi.core.fields import SortingDirection
-from furiousapi.core.pagination import PaginatedResponse, PaginationStrategyEnum
+from furiousapi.api.pagination import PaginatedResponse, PaginationStrategyEnum
 from pydantic import BaseConfig
 from sqlalchemy import Integer, asc, desc, func
 
 from sqlmodel.sql.expression import select
 
 if TYPE_CHECKING:
-    from furiousapi.core.db.fields import SortableFieldEnum
+    from furiousapi.db.fields import SortableFieldEnum
     from sqlalchemy.orm import InstrumentedAttribute
     from sqlalchemy.sql.elements import Cast, ColumnElement
 
@@ -321,5 +321,5 @@ def get_paginator(
     if not isinstance(strategy, Enum):
         strategy = PaginationStrategyEnum[strategy]
     if not (paginator := PAGINATION_MAPPING.get(strategy)):
-        raise FuriousAPIError(BadRequestHttpErrorDetails(detail=f"pagination strategy {strategy} not found"))
+        raise FuriousAPIError(BadRequestHttpErrorResponse(detail=f"pagination strategy {strategy} not found"))
     return paginator
