@@ -93,12 +93,11 @@ classifiers = [
 description = "MongoDB Implementation for FastAPI & FuriousAPI"
 documentation = "https://nadobando.github.io/furiousapi"
 homepage = "https://github.com/nadobando/furiousapi-sqlmodel"
+name = "furiousapi-sqlmodel"
 packages = [{include = "furiousapi"}]
 readme = "README.md"
-version = "0.0.1-dev.1"
 repository = "https://github.com/nadobando/furiousapi-sqlmodel"
-
-name = "furiousapi-sqlmodel"
+version = "0.0.1-dev.1"
 
 [tool.poetry.dependencies]
 furiousapi-core = {version = "^0", source = "test", allow-prereleases = true}
