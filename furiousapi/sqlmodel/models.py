@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Type
 
-from furiousapi.core.db.metaclasses import model_query
-from furiousapi.core.db.models import FuriousPydanticConfig
-from furiousapi.core.db.utils import _remove_extra_data_from_signature
+from furiousapi.db.metaclasses import model_query
+from furiousapi.db.models import FuriousPydanticConfig
+from furiousapi.db.utils import _remove_extra_data_from_signature
 from pydantic import BaseModel
 
 from sqlmodel import SQLModel

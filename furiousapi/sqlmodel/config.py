@@ -1,7 +1,12 @@
 from typing import cast
 
+from pydantic import BaseModel, Field, PostgresDsn as _PostgresDsn
+
 from furiousapi.core.config import BaseConnectionSettings
-from pydantic import BaseModel, Field, PostgresDsn
+
+
+class PostgresDsn(_PostgresDsn):
+    user_required = False
 
 
 class PostgreSQLConnectionOptions(BaseModel):

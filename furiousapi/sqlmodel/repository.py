@@ -4,9 +4,9 @@ from collections import deque
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, List, Optional, Tuple, Type, TypeVar, Union, cast
 
-from furiousapi.core.db.exceptions import EntityAlreadyExistsError, EntityNotFoundError
-from furiousapi.core.db.repository import BaseRepository, RepositoryConfig
-from furiousapi.core.pagination import (
+from furiousapi.db import EntityAlreadyExistsError, EntityNotFoundError
+from furiousapi.db import BaseRepository, RepositoryConfig
+from furiousapi.api.pagination import (
     AllPaginationStrategies,
     PaginatedResponse,
     PaginationStrategyEnum,
@@ -48,6 +48,9 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
         columns: List[Column] = self.__model__.__table__.primary_key.columns  # type: ignore[attr-defined]
         return tuple(column.name for column in columns)
 
+    def __primary_values(self, instance: TSQLModel) -> tuple:
+        return tuple(getattr(instance, i) for i in self.__primary_keys)
+
     async def get(
         self,
         identifiers: Union[int, str, dict[str, Any], tuple[Any]],
@@ -79,7 +82,7 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
         if projection:
             projection: list[str] = list(_get_model_fields(self.__model__, projection))
             statement = statement.options(load_only(*projection))
-        if not sorting and pagination.type == PaginationStrategyEnum.CURSOR:
+        if not sorting and pagination.pagination_type == PaginationStrategyEnum.CURSOR:
             sorting = [+self.__sort__(self.__primary_keys[0])]
 
         if filtering and (to_filter := filtering.dict(exclude_unset=True, exclude_defaults=True)):
@@ -94,7 +97,7 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
             "sort_enum": self.__sort__,
         }
 
-        paginator = get_paginator(pagination.type)(**init_params)  # type: ignore[arg-type]
+        paginator = get_paginator(pagination.pagination_type)(**init_params)  # type: ignore[arg-type]
 
         return await paginator.get_page(statement, pagination.limit, pagination.next)
 
@@ -106,7 +109,7 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
                 await self.session.commit()
                 await self.session.refresh(entity)
             except IntegrityError as exc:
-                raise EntityAlreadyExistsError(self.__model__) from exc
+                raise EntityAlreadyExistsError(self.__model__, self.__primary_values(entity)) from exc
             else:
                 return entity
 
