@@ -69,7 +69,7 @@ packages = [
   {include = "furiousapi"}
 ]
 readme = "README.md"
-version = "0.1.0"
+version = "0.0.1-dev.1"
 
 [tool.poetry.dependencies]
 furiousapi-core = {version = "^0", source = "test", allow-prereleases = true}
