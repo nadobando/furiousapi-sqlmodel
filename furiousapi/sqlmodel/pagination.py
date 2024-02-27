@@ -36,7 +36,7 @@ from pydantic import BaseConfig
 from sqlalchemy import Integer, asc, desc, func
 
 from sqlmodel.sql.expression import select
-
+import json
 if TYPE_CHECKING:
     from furiousapi.db.fields import SortableFieldEnum
     from sqlalchemy.orm import InstrumentedAttribute
@@ -117,8 +117,8 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
     ) -> None:
         self.model = model
         config: Type[BaseConfig] = cast(Type[BaseConfig], model.Config)
-        self.__json_dumps__: Callable = config.json_dumps
-        self.__json_loads__: Callable = config.json_loads
+        self.__json_dumps__: Callable = hasattr(config,"json_dumps") and config.json_dumps or json.dumps
+        self.__json_loads__: Callable = hasattr(config,"json_loads") and config.json_loads or json.loads
         super().__init__(session)
         super(SQLModelLimitMixin, self).__init__(sort_enum, id_fields, sorting)
 
