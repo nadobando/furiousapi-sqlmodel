@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import json
 import logging
 from enum import Enum
 from typing import (
@@ -18,10 +19,14 @@ from typing import (
     cast,
 )
 
+import pydantic_core
+import sqlalchemy
 import sqlalchemy as sa
 from furiousapi.api.error_responses import BadRequestHttpErrorResponse
 from furiousapi.api.exceptions import FuriousAPIError
+from furiousapi.api.pagination import PaginatedResponse, PaginationStrategyEnum
 from furiousapi.core.config import get_settings
+from furiousapi.core.fields import SortingDirection
 from furiousapi.db.pagination import (
     BaseCursorPagination,
     BaseRelayPagination,
@@ -30,13 +35,10 @@ from furiousapi.db.pagination import (
     PagePagination,
     PaginatorMixin,
 )
-from furiousapi.core.fields import SortingDirection
-from furiousapi.api.pagination import PaginatedResponse, PaginationStrategyEnum
-from pydantic import BaseConfig
+from furiousapi.utils._pydantic_compat import PYDANTIC_V2
 from sqlalchemy import Integer, asc, desc, func
-
 from sqlmodel.sql.expression import select
-import json
+
 if TYPE_CHECKING:
     from furiousapi.db.fields import SortableFieldEnum
     from sqlalchemy.orm import InstrumentedAttribute
@@ -46,7 +48,12 @@ if TYPE_CHECKING:
     from sqlmodel.ext.asyncio.session import AsyncSession
     from sqlmodel.sql.base import Executable
     from sqlmodel.sql.expression import Select
+if PYDANTIC_V2:
+    from pydantic import ConfigDict
+else:
+    from pydantic import BaseConfig
 
+SQLALCHEMY_V2 = int(sqlalchemy.__version__[0]) >= 2  # noqa: PLR2004
 DEFAULT_PAGE_SIZE = get_settings().pagination.default_size
 logger = logging.getLogger(__name__)
 
@@ -116,9 +123,18 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
         model: Type[SQLModel],
     ) -> None:
         self.model = model
-        config: Type[BaseConfig] = cast(Type[BaseConfig], model.Config)
-        self.__json_dumps__: Callable = hasattr(config,"json_dumps") and config.json_dumps or json.dumps
-        self.__json_loads__: Callable = hasattr(config,"json_loads") and config.json_loads or json.loads
+        if PYDANTIC_V2:
+            config: ConfigDict = model.model_config
+            self.__json_dumps__: Callable = pydantic_core.to_json
+            self.__json_loads__: Callable = pydantic_core.from_json
+        else:
+            config: Type[BaseConfig] = cast(Type[BaseConfig], model.Config)
+            self.__json_dumps__: Callable = (
+                hasattr(config, "json_dumps") and config.json_dumps  # type: ignore[attr-defined]
+            ) or json.dumps
+            self.__json_loads__: Callable = (
+                hasattr(config, "json_loads") and config.json_loads  # type: ignore[attr-defined]
+            ) or json.loads
         super().__init__(session)
         super(SQLModelLimitMixin, self).__init__(sort_enum, id_fields, sorting)
 
@@ -204,7 +220,11 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
         cursor: Tuple[Tuple[str, Any], ...],
         items: List[SQLModel],
     ) -> dict:
-        count_query = query.with_only_columns([func.count(*self.id_fields)]).order_by(None)
+
+        if SQLALCHEMY_V2:
+            count_query = query.with_only_columns(func.count(*self.id_fields)).order_by(None)
+        else:
+            count_query = query.with_only_columns([func.count(*self.id_fields)]).order_by(None)
         logger.info("Count Query", extra={"query": str(count_query.compile(compile_kwargs={"literal_binds": True}))})
         total = (await self.__session__.execute(count_query)).scalar_one()
         index: Optional[int] = 0
@@ -249,7 +269,7 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
 
         if items:
             cursors_out = self.render_cursor(items[-1], field_orderings)
-            new_next = has_next_page and cursors_out or None
+            new_next = (has_next_page and cursors_out) or None
 
         page_info = await self.get_page_info(query, field_orderings, cursor_in, items)
 
@@ -297,7 +317,7 @@ class SQLModelRelayCursorPagination(SQLModelCursorPagination, BaseRelayPaginatio
 
         if items:
             cursors_out = self.make_cursors(items, field_orderings)
-            new_next = has_next_page and cursors_out[-1] or None
+            new_next = (has_next_page and cursors_out[-1]) or None
 
         page_info = await self.get_page_info(query, field_orderings, cursor_in, items)
 

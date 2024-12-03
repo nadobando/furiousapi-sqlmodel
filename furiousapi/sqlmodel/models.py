@@ -5,31 +5,32 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Type
 from furiousapi.db.metaclasses import model_query
 from furiousapi.db.models import FuriousPydanticConfig
 from furiousapi.db.utils import _remove_extra_data_from_signature
+from furiousapi.utils._pydantic_compat import PYDANTIC_V2
 from pydantic import BaseModel
-
 from sqlmodel import SQLModel
 from sqlmodel.main import SQLModelMetaclass
 
 if TYPE_CHECKING:
     from fastapi.params import Depends
-    from pydantic.fields import ModelField
+    from furiousapi.utils._pydantic_compat import ModelField
 
 
 class SQLAllOptionalMeta(SQLModelMetaclass):
     def __new__(mcs, name: str, bases: Tuple[type], namespaces: Dict[str, Any], **kwargs) -> Any:  # noqa: N804
-        __fields__ = {}
         for base in bases:
-            if issubclass(base, FuriousSQLModel):
-                for k, v in list(base.__fields__.items()):
+            if issubclass(base, SQLModel):
+                if PYDANTIC_V2:
+                    model_fields = base.model_fields  # type: ignore[attr-defined]
+                else:
+                    model_fields = base.__fields__  # type: ignore[attr-defined]
+                for k, v in list(model_fields.items()):
                     v: ModelField
                     v.default = None
-                    v.required = False
                     v.annotation = Optional[v.annotation]
-                    # v.type
-                    __fields__.update({k: v})
+                    namespaces.update({k: v})
 
         mcs._convert_sqlmodel(name, namespaces, bases)
-        new = super().__new__(mcs, name, (FuriousSQLModel,), namespaces, **kwargs)
+        new = super().__new__(mcs, name, (SQLModel,), namespaces, **kwargs)
         _remove_extra_data_from_signature(new)
         return new
 
@@ -52,7 +53,11 @@ class SQLAllOptionalMeta(SQLModelMetaclass):
 
 
 class FuriousSQLModel(SQLModel):
-    class Config(FuriousPydanticConfig): ...
+    if PYDANTIC_V2:
+        model_config = FuriousPydanticConfig
+    else:
+
+        class Config(FuriousPydanticConfig): ...
 
 
 def sql_model_query(model: Type[BaseModel]) -> Depends:

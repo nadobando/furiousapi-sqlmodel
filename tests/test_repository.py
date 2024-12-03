@@ -7,14 +7,15 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import pytest
 import pytest_asyncio
-from furiousapi.db import EntityAlreadyExistsError
 from furiousapi.api.pagination import CursorPaginationParams
+from furiousapi.db import EntityAlreadyExistsError
+from furiousapi.utils._pydantic_compat import PYDANTIC_V2
 from sqlalchemy import Column, DateTime
 from sqlalchemy.exc import OperationalError
+from sqlmodel import Field, SQLModel, create_engine
 
 from furiousapi.sqlmodel.models import FuriousSQLModel
 from furiousapi.sqlmodel.repository import BaseSQLRepository, TSQLModel
-from sqlmodel import Field, SQLModel, create_engine
 from tests.utils import get_first_doc_from_cache
 
 if TYPE_CHECKING:
@@ -42,6 +43,11 @@ class MyModel(FuriousSQLModel, table=True):  # type: ignore[call-arg]
 
 
 class MyRepository(BaseSQLRepository[MyModel]): ...
+
+
+# bug: only needed with tox
+if PYDANTIC_V2:
+    MyRepository.__filtering__.model_rebuild()
 
 
 @pytest.fixture(scope="session")
@@ -75,17 +81,16 @@ async def init_data(my_repository: MyRepository, request: FixtureRequest):
         )
         await my_repository.add(model)
         result.append(model.json())
-    nullable_alternator = 0
-    for i in range(PAGINATION):
+
+    for nullable_alternator, i in enumerate(range(PAGINATION)):
         model = MyModel(
             created_at=datetime(2023, 1, 1, 0, i + 1),
             another_id=i + PAGINATION + 1,
             int_number=i + 1,
             float_number=(i % 4) + 1,
             is_boolean=False,
-            nullable=nullable_alternator % 2 and 1 or None,
+            nullable=((nullable_alternator - 1) % 2 and 1) or None,
         )
-        nullable_alternator += 1
         await my_repository.add(model)
         result.append(model.json())
 
@@ -261,7 +266,7 @@ async def init_data(my_repository: MyRepository, request: FixtureRequest):
         ),
     ],
 )
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_list_with_sorting_and_filter(
     caplog: LogCaptureFixture,
     my_repository: MyRepository,
@@ -300,7 +305,7 @@ async def test_list_with_sorting_and_filter(
         [MyRepository.__fields__.is_boolean, MyRepository.__fields__.float_number, MyRepository.__fields__.int_number],
     ],
 )
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_list_with_projection(my_repository: MyRepository, projection: List[SortableFieldEnum]):
     next_ = None
 
@@ -325,14 +330,14 @@ async def test_list_with_projection(my_repository: MyRepository, projection: Lis
         next_ = response.next
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_get(request: FixtureRequest, my_repository: MyRepository):
     first_doc = get_first_doc_from_cache(request, CACHE_KEY, MyModel)
     doc = await my_repository.get(first_doc.id)
     assert doc == first_doc
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_add__when__entity_already_exists__raises_entity_already_exists_error(
     request: FixtureRequest,
     my_repository: MyRepository,

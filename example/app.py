@@ -4,7 +4,7 @@ import uvicorn
 from fastapi import FastAPI, Depends
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from sqlmodel import SQLModel, Field,create_engine
+from sqlmodel import SQLModel, Field, create_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from furiousapi.api import ModelController
@@ -13,7 +13,7 @@ from furiousapi.sqlmodel import SQLRepository
 app = FastAPI()
 
 
-class Item(SQLModel, table=True):
+class Item(SQLModel, table=True):  # type: ignore[call-arg]
     id: int = Field(default=None, primary_key=True)
     name: str
     description: str = Field(default=None, nullable=True)
@@ -46,17 +46,19 @@ def repository() -> Depends:
     return Depends(dep)
 
 
-class ItemController(ModelController, prefix="/item", tags=["Items"]):
+class ItemController(ModelController, prefix="/item", tags=["Items"]):  # type: ignore[call-arg]
     repository = repository()
 
+
 @app.on_event("startup")
-async def startup():
+async def startup() -> None:
     engine = create_engine(
         "sqlite:///test_db.sqlite",
         execution_options={"schema_translate_map": {None: "main"}},
         echo=False,
     )
     SQLModel.metadata.create_all(engine)
+
 
 app.include_router(ItemController.api_router)
 
