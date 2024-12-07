@@ -2,22 +2,22 @@ from __future__ import annotations
 
 from collections import deque
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple, Type, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple, Type, TypeVar, Union, cast, Iterable
 
-from furiousapi.db import EntityAlreadyExistsError, EntityNotFoundError
-from furiousapi.db import BaseRepository, RepositoryConfig
 from furiousapi.api.pagination import (
     AllPaginationStrategies,
     PaginatedResponse,
     PaginationStrategyEnum,
 )
+from furiousapi.db import BaseRepository, RepositoryConfig
+from furiousapi.db import EntityAlreadyExistsError, EntityNotFoundError
 from sqlalchemy import Column, and_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import load_only
+from sqlmodel import SQLModel, select
 
 from furiousapi.sqlmodel.models import SQLAllOptionalMeta, sql_model_query
 from furiousapi.sqlmodel.pagination import get_paginator
-from sqlmodel import SQLModel, select
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -115,16 +115,20 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
 
         return None
 
-    async def update(self, entity: TSQLModel, *, commit: bool = True) -> Optional[TSQLModel]:
-        self.session.add(entity)
+    async def update(self, identifiers: Any, entity: TSQLModel, *, commit: bool = True) -> Optional[TSQLModel]:
+        response = await self.get(identifiers)
+        for key, value in entity.model_dump(exclude_unset=True, exclude=set(self.__primary_keys)).items():
+            setattr(response, key, value)
+        self.session.add(response)
         if commit:
             await self.session.commit()
-            await self.session.refresh(entity)
-            return entity
+            await self.session.refresh(response)
+            return response
         return None
 
-    async def delete(self, entity: Union[TSQLModel, str, int], **kwargs) -> None:
-        return await self.session.delete(entity)
+    async def delete(self, identifiers: tuple, **kwargs) -> None:
+        response = await self.get(identifiers)
+        return await self.session.delete(response)
 
     async def bulk_create(self, bulk: List[TSQLModel], *, commit: bool = True) -> None:
         deque(map(self.session.add, bulk))

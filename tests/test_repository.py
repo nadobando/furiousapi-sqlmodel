@@ -1,71 +1,27 @@
 from __future__ import annotations
 
-import contextlib
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Tuple
 
 import pytest
 import pytest_asyncio
 from furiousapi.api.pagination import CursorPaginationParams
 from furiousapi.db import EntityAlreadyExistsError
-from furiousapi.utils._pydantic_compat import PYDANTIC_V2
-from sqlalchemy import Column, DateTime
-from sqlalchemy.exc import OperationalError
-from sqlmodel import Field, SQLModel, create_engine
 
-from furiousapi.sqlmodel.models import FuriousSQLModel
-from furiousapi.sqlmodel.repository import BaseSQLRepository, TSQLModel
+
+from tests.models import MyRepository, MyModel
 from tests.utils import get_first_doc_from_cache
 
 if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
     from _pytest.logging import LogCaptureFixture
     from furiousapi.db.fields import SortableFieldEnum
-
-    from sqlmodel.ext.asyncio.session import AsyncSession
+    from furiousapi.sqlmodel.repository import TSQLModel
 
 PAGINATION = 5
 
 CACHE_KEY = "sql_doc"
-
-
-class MyModel(FuriousSQLModel, table=True):  # type: ignore[call-arg]
-    __tablename__ = "my_model"
-
-    id: Optional[int] = Field(nullable=False, primary_key=True)
-    created_at: Optional[datetime] = Field(None, sa_column=Column(DateTime(timezone=True)))
-    another_id: int
-    int_number: int
-    float_number: int
-    is_boolean: bool
-    nullable: Optional[int]
-
-
-class MyRepository(BaseSQLRepository[MyModel]): ...
-
-
-# bug: only needed with tox
-if PYDANTIC_V2:
-    MyRepository.__filtering__.model_rebuild()
-
-
-@pytest.fixture(scope="session")
-def _create_table() -> None:
-    engine = create_engine(
-        "sqlite:///test_db.sqlite",
-        execution_options={"schema_translate_map": {None: "main"}},
-        echo=False,
-    )
-    with contextlib.suppress(OperationalError):
-        SQLModel.metadata.tables["my_model"].drop(bind=engine)
-
-    SQLModel.metadata.tables["my_model"].create(bind=engine)
-
-
-@pytest_asyncio.fixture(scope="session")
-async def my_repository(_create_table: None, sql_session: AsyncSession) -> MyRepository:
-    return MyRepository(sql_session)
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)

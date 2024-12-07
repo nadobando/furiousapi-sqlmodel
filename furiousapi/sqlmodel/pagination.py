@@ -35,7 +35,7 @@ from furiousapi.db.pagination import (
     PagePagination,
     PaginatorMixin,
 )
-from furiousapi.utils._pydantic_compat import PYDANTIC_V2
+from furiousapi.pydantic import PYDANTIC_V2
 from sqlalchemy import Integer, asc, desc, func
 from sqlmodel.sql.expression import select
 
@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     from sqlmodel.sql.base import Executable
     from sqlmodel.sql.expression import Select
 if PYDANTIC_V2:
-    from pydantic import ConfigDict
+    pass
 else:
     from pydantic import BaseConfig
 
@@ -124,7 +124,6 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
     ) -> None:
         self.model = model
         if PYDANTIC_V2:
-            config: ConfigDict = model.model_config
             self.__json_dumps__: Callable = pydantic_core.to_json
             self.__json_loads__: Callable = pydantic_core.from_json
         else:
@@ -339,7 +338,7 @@ def get_paginator(
     strategy: Union[PaginationStrategyEnum, str] = PaginationStrategyEnum.CURSOR,
 ) -> Union[Type[SQLModelOffsetPagination], Type[SQLModelCursorPagination]]:
     if not isinstance(strategy, Enum):
-        strategy = PaginationStrategyEnum[strategy]
+        strategy = PaginationStrategyEnum(strategy)
     if not (paginator := PAGINATION_MAPPING.get(strategy)):
         raise FuriousAPIError(BadRequestHttpErrorResponse(detail=f"pagination strategy {strategy} not found"))
     return paginator

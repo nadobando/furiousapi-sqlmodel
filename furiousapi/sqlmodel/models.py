@@ -5,14 +5,14 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Type
 from furiousapi.db.metaclasses import model_query
 from furiousapi.db.models import FuriousPydanticConfig
 from furiousapi.db.utils import _remove_extra_data_from_signature
-from furiousapi.utils._pydantic_compat import PYDANTIC_V2
+from furiousapi.pydantic import PYDANTIC_V2
 from pydantic import BaseModel
 from sqlmodel import SQLModel
 from sqlmodel.main import SQLModelMetaclass
 
 if TYPE_CHECKING:
     from fastapi.params import Depends
-    from furiousapi.utils._pydantic_compat import ModelField
+    from furiousapi.pydantic import ModelField
 
 
 class SQLAllOptionalMeta(SQLModelMetaclass):
