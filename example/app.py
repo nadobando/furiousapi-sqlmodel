@@ -1,66 +1,30 @@
-from typing import Annotated
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 import uvicorn
-from fastapi import FastAPI, Depends
-from sqlalchemy.ext.asyncio import create_async_engine
+from fastapi import FastAPI
+from sqlmodel import SQLModel, create_engine
 
-from sqlmodel import SQLModel, Field, create_engine
-from sqlmodel.ext.asyncio.session import AsyncSession
-
-from furiousapi.api import ModelController
-from furiousapi.sqlmodel import SQLRepository
-
-app = FastAPI()
+from example.config import CONNECTION_STRING
+from example.controllers import ItemController, ReviewController
 
 
-class Item(SQLModel, table=True):  # type: ignore[call-arg]
-    id: int = Field(default=None, primary_key=True)
-    name: str
-    description: str = Field(default=None, nullable=True)
-
-
-class ItemRepository(SQLRepository[Item]):
-    pass
-
-
-engine = create_async_engine(
-    "sqlite+aiosqlite:///test_db.sqlite",
-    execution_options={"schema_translate_map": {None: "main"}},
-    echo=False,
-)
-
-
-async def sql_session() -> AsyncSession:
-    async with AsyncSession(engine, expire_on_commit=False) as session:
-
-        yield session
-
-
-SessionDep = Annotated[AsyncSession, Depends(sql_session)]
-
-
-def repository() -> Depends:
-    def dep(session: SessionDep) -> ItemRepository:
-        return ItemRepository(session)
-
-    return Depends(dep)
-
-
-class ItemController(ModelController, prefix="/item", tags=["Items"]):  # type: ignore[call-arg]
-    repository = repository()
-
-
-@app.on_event("startup")
-async def startup() -> None:
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     engine = create_engine(
-        "sqlite:///test_db.sqlite",
+        "sqlite:///" + CONNECTION_STRING,
         execution_options={"schema_translate_map": {None: "main"}},
         echo=False,
     )
     SQLModel.metadata.create_all(engine)
+    yield
+    # Add any cleanup code here if needed
 
+
+app = FastAPI(lifespan=lifespan)
 
 app.include_router(ItemController.api_router)
+app.include_router(ReviewController.api_router)
 
 if __name__ == "__main__":
-    uvicorn.run(app)
+    uvicorn.run(app, port=8081)

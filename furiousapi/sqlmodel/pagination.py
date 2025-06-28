@@ -17,6 +17,7 @@ from typing import (
     Type,
     Union,
     cast,
+    Iterable,
 )
 
 import pydantic_core
@@ -36,22 +37,27 @@ from furiousapi.db.pagination import (
     PaginatorMixin,
 )
 from furiousapi.pydantic import PYDANTIC_V2
-from sqlalchemy import Integer, asc, desc, func
+from sqlalchemy import Integer, asc, desc, func, Row, Operators
+from sqlalchemy.sql.operators import desc_op, asc_op
+from sqlmodel import SQLModel
 from sqlmodel.sql.expression import select
 
+from furiousapi.sqlmodel.utils import query_requires_unique
+
 if TYPE_CHECKING:
+    from sqlmodel.sql._expression_select_cls import SelectOfScalar
     from furiousapi.db.fields import SortableFieldEnum
     from sqlalchemy.orm import InstrumentedAttribute
-    from sqlalchemy.sql.elements import Cast, ColumnElement
+    from sqlalchemy.sql.elements import Cast, ColumnElement, UnaryExpression
 
-    from sqlmodel import SQLModel
     from sqlmodel.ext.asyncio.session import AsyncSession
     from sqlmodel.sql.base import Executable
     from sqlmodel.sql.expression import Select
-if PYDANTIC_V2:
-    pass
-else:
-    from pydantic import BaseConfig
+
+    if PYDANTIC_V2:
+        pass
+    else:
+        from pydantic import BaseConfig
 
 SQLALCHEMY_V2 = int(sqlalchemy.__version__[0]) >= 2  # noqa: PLR2004
 DEFAULT_PAGE_SIZE = get_settings().pagination.default_size
@@ -72,8 +78,11 @@ class SQLModelLimitMixin(PaginatorMixin):
     async def get_page(self, query: Select, limit: int, **kwargs) -> Tuple[List, bool]:
         query = query.limit(limit + 1)
         s = "\n" + str(query.compile(compile_kwargs={"literal_binds": True})) + "\n"
-        logger.info(s)
-        items = (await self.__session__.exec(query)).all()
+        logger.info(f"Page Query:{s}\n")
+        if query_requires_unique(query):
+            items = (await self.__session__.exec(query)).unique().all()
+        else:
+            items = (await self.__session__.exec(query)).all()
 
         if limit is not None and len(items) > limit:
             has_next_page = True
@@ -116,9 +125,7 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
 
     def __init__(
         self,
-        sort_enum: Type[SortableFieldEnum],
         id_fields: Set[str],
-        sorting: List[SortableFieldEnum],
         session: AsyncSession,
         model: Type[SQLModel],
     ) -> None:
@@ -127,15 +134,17 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
             self.__json_dumps__: Callable = pydantic_core.to_json
             self.__json_loads__: Callable = pydantic_core.from_json
         else:
-            config: Type[BaseConfig] = cast(Type[BaseConfig], model.Config)
+            config: Type[BaseConfig] = cast("Type[BaseConfig]", model.Config)
             self.__json_dumps__: Callable = (
-                hasattr(config, "json_dumps") and config.json_dumps  # type: ignore[attr-defined]
+                hasattr(config, "json_dumps") and config.json_dumps
+                # type: ignore[attr-defined]
             ) or json.dumps
             self.__json_loads__: Callable = (
-                hasattr(config, "json_loads") and config.json_loads  # type: ignore[attr-defined]
+                hasattr(config, "json_loads") and config.json_loads
+                # type: ignore[attr-defined]
             ) or json.loads
         super().__init__(session)
-        super(SQLModelLimitMixin, self).__init__(sort_enum, id_fields, sorting)
+        super(SQLModelLimitMixin, self).__init__(id_fields)
 
     @staticmethod
     def _handle_nullable(column: InstrumentedAttribute, value: Any, *, is_nullable: bool) -> ColumnElement:
@@ -155,7 +164,17 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
     def get_filter(self, field_orderings: List[SortableFieldEnum], cursor: Cursor) -> ColumnElement:
         column_cursors = []
         for field, cursor_value in zip(field_orderings, cursor):
-            column_cursors.append((getattr(self.model, field.name), field.direction, cursor_value))
+            if field.modifier == asc_op:
+                sort = SortingDirection.ASCENDING
+            else:
+                sort = SortingDirection.DESCENDING
+
+            if field.element.key is None:
+                key = field.element.element.key
+            else:
+                key = field.element.key
+
+            column_cursors.append((getattr(self.model, key), sort, cursor_value))
         or_ = [self.get_filter_clause(column_cursors[: i + 1]) for i in range(len(column_cursors))]
 
         return sa.or_(*or_)
@@ -219,23 +238,31 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
         cursor: Tuple[Tuple[str, Any], ...],
         items: List[SQLModel],
     ) -> dict:
-
         if SQLALCHEMY_V2:
-            count_query = query.with_only_columns(func.count(*self.id_fields)).order_by(None)
+            count_query = select(func.count()).select_from(query.subquery())
         else:
-            count_query = query.with_only_columns([func.count(*self.id_fields)]).order_by(None)
-        logger.info("Count Query", extra={"query": str(count_query.compile(compile_kwargs={"literal_binds": True}))})
-        total = (await self.__session__.execute(count_query)).scalar_one()
+            count_query = query.with_only_columns([func.count(*self.id_fields)])
+
+        count_query.order_by(None)
+        query_string = str(count_query.compile(compile_kwargs={"literal_binds": True}))
+
+        logger.info(f"Count Query\n {query_string}\n", extra={"query": query_string})
+        total = (await self.__session__.exec(count_query)).first()
         index: Optional[int] = 0
         if cursor:
-            inverted_ordering = [~field for field in field_orderings]
+            inverted_ordering = []
+            order_by_clauses = list(query._order_by_clauses)  # noqa: SLF001
+            all_order_by_clauses = order_by_clauses + field_orderings
+            for i in all_order_by_clauses:
+                if i.modifier == asc_op:
+                    inverted_ordering.append(desc(i.element))
+                else:
+                    inverted_ordering.append(asc(i.element))
             filter_clause = self.get_filter(inverted_ordering, cursor)
             index_query = select(func.count()).select_from(query.filter(filter_clause).subquery())
 
-            logger.debug(
-                "Index Query", extra={"query": str(index_query.compile(compile_kwargs={"literal_binds": True}))}
-            )
-            index = (await self.__session__.execute(index_query)).scalar_one() + 1
+            logger.info(f"Index Query:\n {index_query.compile(compile_kwargs={'literal_binds': True})!s}\n")
+            index = (await self.__session__.exec(index_query)).first() + 1
 
             if self.reversed:
                 before_index = total - index
@@ -249,35 +276,128 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
     async def get_page(
         self, query: Union[Select, Executable], limit: int, next_: Optional[str] = None, **kwargs
     ) -> PaginatedResponse:
-        field_orderings = self.get_field_orderings()
+        field_orderings = self.get_field_orderings(query)
 
-        cursor_in = self.parse_cursor(next_, field_orderings)
+        order_by_clauses = list(query._order_by_clauses)  # noqa: SLF001
+        all_order_by_claues = order_by_clauses + field_orderings
+        cursor_in = self.parse_cursor(next_, all_order_by_claues)
 
         page_query = query
 
-        page_query = page_query.order_by(
-            *[SORTING_FUNCS_MAPPING[sorting_field.direction](sorting_field.name) for sorting_field in field_orderings],
-        )
+        page_query = page_query.order_by(*field_orderings)
         if cursor_in is not None:
-            page_query = page_query.filter(self.get_filter(field_orderings, cursor_in))
+            page_query = page_query.filter(self.get_filter(all_order_by_claues, cursor_in))
 
         items, has_next_page = await super().get_page(page_query, limit, next_=next_)
+
         new_next = None
         if self.reversed:
             items.reverse()
 
         if items:
-            cursors_out = self.render_cursor(items[-1], field_orderings)
+            if items[-1] is Row:
+                item = items[-1][0]
+            else:
+                item = items[-1]
+            cursors_out = self.render_cursor(item, all_order_by_claues)
             new_next = (has_next_page and cursors_out) or None
 
         page_info = await self.get_page_info(query, field_orderings, cursor_in, items)
+        if PYDANTIC_V2:
+            result = (
+                PaginatedResponse[self.model].model_construct(
+                    next=new_next,
+                    items=items,
+                    total=page_info["total"],
+                    index=page_info["index"],
+                ),
+                page_query,
+                page_info,
+            )
+        else:
+            result = (
+                PaginatedResponse[self.model](
+                    next=new_next,
+                    items=items,
+                    total=page_info["total"],
+                    index=page_info["index"],
+                ),
+                page_query,
+                page_info,
+            )
+        return result
 
-        return PaginatedResponse[self.model](
-            next=new_next,
-            items=items,
-            total=page_info["total"],
-            index=page_info["index"],
-        )
+    def transform_to_model_fields(self, row_dict: dict) -> dict:
+        mapper = sqlalchemy.inspect(self.model)
+        for rel in mapper.relationships:
+            rel_name = rel.key
+            rel_class_name = rel.entity.class_.__name__
+            if rel_class_name in row_dict:
+                row_dict[rel_name] = row_dict.pop(rel_class_name)
+        return row_dict
+
+    def _get_nested_value(self, item: Any, field: ColumnElement) -> Any:
+        try:
+            # Unwrap UnaryExpression (like -column)
+            while hasattr(field, "element"):
+                field = field.element
+
+            # Now extract the full attribute path (if any)
+            attr_path: List[Any] = []  # TODO: check this hint
+            current = field
+            while hasattr(current, "left") and hasattr(current.left, "key"):
+                if current.key is not None:
+                    attr_path.insert(0, current.key)
+                current = current.left
+
+            # Fallback if it's just a column
+            if not attr_path and hasattr(current, "key"):
+                attr_path.append(current.key)
+
+            value = item
+            for attr in attr_path:
+                value = getattr(value, attr, None)
+                if value is None:
+                    return None
+
+        except Exception as e:
+            raise AttributeError(f"Failed to resolve value for {field!r}") from e
+        else:
+            return value
+
+    def render_cursor(self, item: SQLModel, column_fields: Iterable[UnaryExpression]) -> str:
+        if PYDANTIC_V2:
+            cursor_ = []
+            for field in column_fields:
+                if isinstance(item, SQLModel):
+                    dumped_value = self.__json_dumps__(self._get_nested_value(item, field))
+
+                else:
+                    dumped_value = self.__json_dumps__(item)
+                cursor_.append(dumped_value.decode())
+            cursor = tuple(cursor_)
+        else:
+            cursor = tuple(
+                self.__json_dumps__(getattr(item, field.element.key), default=str) for field in column_fields
+            )
+        return self.encode_cursor(cursor)
+
+    def get_field_orderings(self, query: Union[Select, SelectOfScalar]) -> list[ColumnElement[Any] | Operators]:
+        sorting = list(query._order_by_clauses) or []  # noqa: SLF001
+        sorting_fields = set()
+        for sort in sorting:
+            namespace = sort.element.entity_namespace
+            sorting_fields.add((sort.element.key, namespace if isinstance(namespace, SQLModel) else sort.element.table))
+        if sorting:
+            op = asc_op if sorting[-1].modifier == asc_op else desc_op
+        else:
+            op = asc_op
+
+        return [
+            op(getattr(self.model, id_field))
+            for id_field in self.id_fields
+            if (id_field, self.model) not in frozenset(sorting_fields)
+        ]
 
 
 class SQLModelRelayCursorPagination(SQLModelCursorPagination, BaseRelayPagination):
@@ -295,15 +415,14 @@ class SQLModelRelayCursorPagination(SQLModelCursorPagination, BaseRelayPaginatio
         self, query: Union[Select, Executable], limit: int, next_: Optional[str] = None, **kwargs
     ) -> PaginatedResponse:
         current_next = next_
-        field_orderings = self.get_field_orderings()
+
+        field_orderings = self.get_field_orderings(query)
 
         cursor_in = self.parse_cursor(current_next, field_orderings)
 
         page_query = query
 
-        page_query = page_query.order_by(
-            *[SORTING_FUNCS_MAPPING[sorting_field.direction](sorting_field.name) for sorting_field in field_orderings],
-        )
+        page_query = page_query.order_by(*field_orderings)
         if cursor_in is not None:
             page_query = page_query.filter(self.get_filter(field_orderings, cursor_in))
 
@@ -319,7 +438,6 @@ class SQLModelRelayCursorPagination(SQLModelCursorPagination, BaseRelayPaginatio
             new_next = (has_next_page and cursors_out[-1]) or None
 
         page_info = await self.get_page_info(query, field_orderings, cursor_in, items)
-
         return PaginatedResponse[self.model](
             next=new_next,
             items=items,
@@ -330,7 +448,7 @@ class SQLModelRelayCursorPagination(SQLModelCursorPagination, BaseRelayPaginatio
 
 PAGINATION_MAPPING = {
     PaginationStrategyEnum.OFFSET: SQLModelOffsetPagination,
-    PaginationStrategyEnum.CURSOR: SQLModelRelayCursorPagination,
+    PaginationStrategyEnum.CURSOR: SQLModelCursorPagination,
 }
 
 

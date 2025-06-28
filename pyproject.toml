@@ -38,24 +38,26 @@ target-version = ['py39']
 
 [tool.coverage.report]
 exclude_lines = [
-  "if TYPE_CHECKING:",
-  "if __name__ == .__main__.:"
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:"
 ]
 
 [tool.coverage.run]
 branch = true
-include = [
-  "*/furiousapi/*"
+source = [
+    "*/furiousapi/*"
 ]
 
 [tool.isort]
 profile = "black"
-
+[[tool.mypy.overrides]]
+module = "tests/test_repository"
+disable_error_code = "attr-defined"
 [tool.mypy]
 check_untyped_defs = true
 disable_error_code = "no-redef"
 exclude = [
-  '.venv/**/*.py'
+    '.venv/**/*.py'
 ]
 explicit_package_bases = true
 ignore_missing_imports = true
@@ -65,46 +67,47 @@ plugins = "pydantic.mypy"
 [tool.poetry]
 authors = ["nadobando <7695172+nadobando@users.noreply.github.com>"]
 classifiers = [
-  "License :: OSI Approved :: MIT License",
-  "Operating System :: OS Independent",
-  "Programming Language :: Python",
-  "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.8",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: 3.13",
-  "Framework :: AsyncIO",
-  "Framework :: Pydantic",
-  "Framework :: FastAPI",
-  "Topic :: Database",
-  "Topic :: Software Development",
-  "Topic :: Internet",
-  "Topic :: Software Development :: Libraries :: Application Frameworks",
-  "Topic :: Software Development :: Libraries :: Python Modules",
-  "Topic :: Software Development :: Libraries",
-  "Topic :: Software Development",
-  "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
-  "Topic :: Internet :: WWW/HTTP",
-  "Environment :: Web Environment",
-  "Intended Audience :: Developers",
-  "Typing :: Typed"
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Framework :: AsyncIO",
+    "Framework :: Pydantic",
+    "Framework :: FastAPI",
+    "Topic :: Database",
+    "Topic :: Software Development",
+    "Topic :: Internet",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Internet :: WWW/HTTP",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "Typing :: Typed"
 ]
 description = "MongoDB Implementation for FastAPI & FuriousAPI"
 documentation = "https://nadobando.github.io/furiousapi"
 homepage = "https://github.com/nadobando/furiousapi-sqlmodel"
 name = "furiousapi-sqlmodel"
-packages = [{include = "furiousapi"}]
+packages = [{ include = "furiousapi" }]
 readme = "README.md"
 repository = "https://github.com/nadobando/furiousapi-sqlmodel"
 version = "0.0.1-dev.1"
 
 [tool.poetry.dependencies]
-furiousapi-core = {git = "https://github.com/nadobando/furiousapi-core", branch = "dev2", develop = true}
+furiousapi-core = {git = "https://github.com/nadobando/furiousapi-core", branch = "dev", develop = true}
+#furiousapi-core = { path = "../furiousapi-core" }
 pydantic-settings = "*"
 python = ">=3.9.5,<=3.13"
-sqlalchemy = "*"
+sqlalchemy = "^2"
 sqlmodel = "^0"
 
 [tool.poetry.group.dev.dependencies]
@@ -117,14 +120,14 @@ pre-commit = "^4"
 pytest = "^7"
 pytest-asyncio = "^0"
 pytest-cov = "^4"
-pytest-xdist = {version = "^3", extras = ["psutil"]}
+pytest-xdist = { version = "^3", extras = ["psutil"] }
 tox = "^4"
 
 [tool.poetry.plugins]
 
 [[tool.poetry.source]]
 name = "test"
-secondary = true
+priority = "explicit"
 url = "https://test.pypi.org/simple/"
 
 # enable_recursive_aliases = true
@@ -135,60 +138,69 @@ warn_required_dynamic_aliases = true
 warn_untyped_fields = true
 
 [tool.pytest.ini_options]
-addopts = "-ra"
+addopts = "-ra --cov-report=term-missing:skip-covered --cov-report html --cov furiousapi"
+#log_cli = true
+#log_cli_level = "INFO"
+#log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(extra)s:%(lineno)s)"
+#log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
 testpaths = [
-  "tests"
+    "tests"
 ]
 
 [tool.ruff]
 exclude = [
-  ".bzr",
-  ".direnv",
-  ".eggs",
-  ".git",
-  ".hg",
-  ".mypy_cache",
-  ".nox",
-  ".pants.d",
-  ".ruff_cache",
-  ".svn",
-  ".tox",
-  ".venv",
-  "__pypackages__",
-  "_build",
-  "buck-out",
-  "build",
-  "dist",
-  "node_modules",
-  "venv"
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv"
 ]
 line-length = 120
 lint.ignore = [
-  "SIM108",
-  "UP",
-  "D",
-  "A003",
-  "B008",
-  "B905",
-  "COM",
-  "PLR0913",
-  "ANN003",
-  "ANN002",
-  "EM101",
-  "TRY003",
-  "UP035",
-  "G004",
-  "EM102",
-  "I001",
-  "ANN401",
-  "TD",
-  "FIX002"
+    "SIM108",
+    "UP",
+    "D",
+    "A003",
+    "B008",
+    "B905",
+    "COM",
+    "PLR0913",
+    "ANN003",
+    "ANN002",
+    "EM101",
+    "TRY003",
+    "UP035",
+    "G004",
+    "EM102",
+    "I001",
+    "ANN401",
+    "TD",
+    "FIX002",
+    "E712"
 ]
+lint.fixable = ["ALL"]
+lint.extend-safe-fixes = ["T20","ERA00"]
 lint.select = ["ALL"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["ANN201", "S101", "DTZ001", "PLR0913"]
-"example/*" =["INP"]
+"tests/*" = ["ANN201", "S101", "DTZ001", "PLR0913","FA100"]
+
+"example/*" = ["INP"]
 [tool.ruff.lint.flake8-annotations]
 mypy-init-return = true
 
@@ -201,10 +213,10 @@ keep-runtime-typing = false
 
 [tool.semantic_release]
 version_toml = [
-  "pyproject.toml:tool.poetry.version"
+    "pyproject.toml:tool.poetry.version"
 ]
 version_variables = [
-  "furiousapi/sqlmodel/__init__.py:__version__"
+    "furiousapi/sqlmodel/__init__.py:__version__"
 ]
 
 [tool.semantic_release.branches.dev]
@@ -218,8 +230,8 @@ prerelease = false
 
 [tool.semantic_release.changelog]
 exclude_commit_patterns = [
-  "^ci:.*",
-  "^(?!feat:|fix:|perf:|refactor:).*$"
+    "^ci:.*",
+    "^(?!feat:|fix:|perf:|refactor:).*$"
 ]
 
 [tool.semantic_release.publish]

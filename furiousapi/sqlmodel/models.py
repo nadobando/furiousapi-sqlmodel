@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class SQLAllOptionalMeta(SQLModelMetaclass):
-    def __new__(mcs, name: str, bases: Tuple[type], namespaces: Dict[str, Any], **kwargs) -> Any:  # noqa: N804
+    def __new__(mcs, name: str, bases: Tuple[type], namespaces: Dict[str, Any], **kwargs) -> Any:
         for base in bases:
             if issubclass(base, SQLModel):
                 if PYDANTIC_V2:

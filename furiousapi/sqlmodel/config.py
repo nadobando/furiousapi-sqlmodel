@@ -14,5 +14,5 @@ class PostgreSQLConnectionOptions(BaseModel):
 
 
 class PostgreSQLConnectionSettings(BaseConnectionSettings[PostgresDsn, PostgreSQLConnectionOptions]):
-    connection_string: PostgresDsn = cast(PostgresDsn, "postgresql+asyncpg://user@localhost:5432")
+    connection_string: PostgresDsn = cast("PostgresDsn", "postgresql+asyncpg://user@localhost:5432")
     options: PostgreSQLConnectionOptions = Field(default_factory=PostgreSQLConnectionOptions)
