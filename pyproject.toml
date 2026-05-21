@@ -56,6 +56,8 @@ furiousapi-core = { workspace=true }
 [dependency-groups]
 dev = [
     "aiosqlite",
+    "asyncpg>=0.29",
+    "testcontainers[postgres]>=4.0",
 ]
 
 [tool.hatch.build.targets.wheel]
