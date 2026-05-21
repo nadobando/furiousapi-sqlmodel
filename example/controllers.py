@@ -8,15 +8,21 @@ from sqlalchemy.orm import joinedload
 
 from example.dependencies import item_repository, review_repository
 from example.models import ItemRead, ItemCreate, ReviewCreate, Item
+from furiousapi.sqlmodel.query.model import RQLModelSQL
 from furiousapi.sqlmodel.utils import dump_with_relationships
 
 if TYPE_CHECKING:
     from furiousapi.core.types import TModelFields
 
 
+class ItemRQL(RQLModelSQL):
+    __model__ = Item
+
+
 class ItemController(ModelController, prefix="/item", tags=["Items"]):  # type: ignore[call-arg]
     repository = item_repository()
     get_model = ItemRead
+    __filtering__ = ItemRQL
 
     async def get(
         self, id_: int = Path(..., alias="id"), fields: Optional[List["TModelFields"]] = Query(None)

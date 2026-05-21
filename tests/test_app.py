@@ -182,10 +182,6 @@ class TestRQLFilters:
             assert r.status_code == HTTPStatus.OK
         client.post("/item/", json=make_item("rql-distractor"))
 
-    @pytest.mark.xfail(
-        reason="RQL transform throws 'str' AttributeError on Postgres — likely InstrumentedAttribute handling assumes SQLite dialect. Pre-existing bug, logged in CONCERNS.md.",
-        strict=True,
-    )
     def test_eq_filter(self, client: TestClient) -> None:
         name = f"{self.target_name}-0"
         r = client.get("/item/", params={"q": f"eq(name,{name})", "limit": 10})
@@ -193,10 +189,6 @@ class TestRQLFilters:
         names = [it["name"] for it in r.json()["items"]]
         assert name in names
 
-    @pytest.mark.xfail(
-        reason="Same RQL transform issue as test_eq_filter.",
-        strict=True,
-    )
     def test_and_filter(self, client: TestClient) -> None:
         name = f"{self.target_name}-1"
         r = client.get(
@@ -221,10 +213,6 @@ class TestRQLSorts:
             r = client.post("/item/", json=make_item(f"{self.prefix}-{i}"))
             assert r.status_code == HTTPStatus.OK
 
-    @pytest.mark.xfail(
-        reason="Same RQL transform 'str' AttributeError as the filter tests.",
-        strict=True,
-    )
     def test_sort_asc(self, client: TestClient) -> None:
         r = client.get(
             "/item/",
