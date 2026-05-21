@@ -5,17 +5,16 @@ import uvicorn
 from fastapi import FastAPI
 from sqlmodel import SQLModel, create_engine
 
-from example.config import CONNECTION_STRING
+from example import config
 from example.controllers import ItemController, ReviewController
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
-    engine = create_engine(
-        "sqlite:///" + CONNECTION_STRING,
-        execution_options={"schema_translate_map": {None: "main"}},
-        echo=False,
-    )
+    kwargs = {"echo": False}
+    if config.DATABASE_URL_SYNC.startswith("sqlite"):
+        kwargs["execution_options"] = {"schema_translate_map": {None: "main"}}
+    engine = create_engine(config.DATABASE_URL_SYNC, **kwargs)
     SQLModel.metadata.create_all(engine)
     yield
     # Add any cleanup code here if needed

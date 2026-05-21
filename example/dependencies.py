@@ -4,14 +4,14 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from example.config import CONNECTION_STRING
+from example import config
 from example.repositories import ItemRepository, ReviewRepository
 
-engine = create_async_engine(
-    f"sqlite+aiosqlite:///{CONNECTION_STRING}",
-    execution_options={"schema_translate_map": {None: "main"}},
-    echo=False,
-)
+_engine_kwargs: dict = {"echo": False}
+if config.DATABASE_URL.startswith("sqlite"):
+    _engine_kwargs["execution_options"] = {"schema_translate_map": {None: "main"}}
+
+engine = create_async_engine(config.DATABASE_URL, **_engine_kwargs)
 
 
 async def sql_session() -> AsyncSession:
