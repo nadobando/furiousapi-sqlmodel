@@ -56,7 +56,7 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
 
     @cached_property
     def __primary_keys__(self) -> set[str]:
-        columns: List[Column] = self.__model__.__table__.primary_key.columns  # type: ignore[attr-defined]
+        columns: List[Column] = self.__model__.__table__.primary_key.columns
         return {column.name for column in columns}
 
     def __primary_values(self, instance: TSQLModel) -> tuple:

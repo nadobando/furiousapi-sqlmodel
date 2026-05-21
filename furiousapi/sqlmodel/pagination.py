@@ -88,9 +88,7 @@ class SQLModelOffsetPaginatorMixin(SQLModelLimitMixin):
     def __init__(self, session: AsyncSession):
         super().__init__(session)
 
-    async def get_page(  # type: ignore[override]
-        self, query: Select, limit: int, next_: int = 0, **kwargs
-    ) -> PaginatedResponse:
+    async def get_page(self, query: Select, limit: int, next_: int = 0, **kwargs) -> PaginatedResponse:
         query = query.offset(next_)
         res = await super().get_page(query, limit, **kwargs)
         return PaginatedResponse(items=res[0], index=next_, next=next_ + limit)
@@ -125,14 +123,8 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
             self.__json_loads__: Callable = pydantic_core.from_json
         else:
             config: Type[BaseConfig] = cast("Type[BaseConfig]", model.Config)
-            self.__json_dumps__: Callable = (
-                hasattr(config, "json_dumps") and config.json_dumps
-                # type: ignore[attr-defined]
-            ) or json.dumps
-            self.__json_loads__: Callable = (
-                hasattr(config, "json_loads") and config.json_loads
-                # type: ignore[attr-defined]
-            ) or json.loads
+            self.__json_dumps__: Callable = (hasattr(config, "json_dumps") and config.json_dumps) or json.dumps
+            self.__json_loads__: Callable = (hasattr(config, "json_loads") and config.json_loads) or json.loads
         super().__init__(session)
         super(SQLModelLimitMixin, self).__init__(id_fields)
 

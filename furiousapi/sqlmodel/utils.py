@@ -116,5 +116,5 @@ def query_requires_unique(query: Select) -> bool:
 
 
 def model_primary_keys_fields(model: Type[SQLModel]) -> Tuple[InstrumentedAttribute, ...]:
-    columns: List[ReadOnlyColumnCollection] = model.__table__.primary_key.columns  # type: ignore[attr-defined]
+    columns: List[ReadOnlyColumnCollection] = model.__table__.primary_key.columns
     return tuple(getattr(model, column.name) for column in columns)
