@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING, Tuple
 
 import pytest
-from furiousapi.api.pagination import CursorPaginationParams, PaginatedResponse
+
 from furiousapi.db import EntityAlreadyExistsError
 from sqlalchemy import desc
 from sqlmodel import select, asc
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
     from _pytest.logging import LogCaptureFixture
     from furiousapi.sqlmodel.repository import TSQLModel
+    from furiousapi.api.pagination import PaginatedResponse
 
 
 @pytest.mark.parametrize("limit", [2, 5, 10], ids=["limit 2", "limit 5", "limit 10"])
@@ -155,20 +156,18 @@ async def test_list_with_sorting_and_filter(
     filtering: TSQLModel,
     expected: list[int],
 ):
-    caplog.set_level(
-        logging.DEBUG,
-    )
-
+    caplog.set_level(logging.DEBUG)
     next_ = None
     result = []
     index_counter = 0
     query = select(MyModel)
     if filtering is not None:
-        query = query.filter(filtering)
+        query = query.where(filtering)
     if sorting:
         query = query.order_by(*sorting)
     response: PaginatedResponse
-    while response := await my_repository.query(query, CursorPaginationParams(limit=limit, next=next_)):
+    paginator = my_repository.get_paginator("cursor")
+    while response := await paginator.get_page(query, limit, next_):
         result += [i.another_id for i in response.items]
         assert response.index == index_counter
         index_counter += limit
