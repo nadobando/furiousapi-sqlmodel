@@ -1,7 +1,6 @@
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-import uvicorn
 from fastapi import FastAPI
 from sqlmodel import SQLModel, create_engine
 
@@ -26,4 +25,6 @@ app.include_router(ItemController.api_router)
 app.include_router(ReviewController.api_router)
 
 if __name__ == "__main__":
+    import uvicorn
+
     uvicorn.run(app, port=8080)

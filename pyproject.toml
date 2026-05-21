@@ -57,6 +57,7 @@ furiousapi-core = { workspace=true }
 dev = [
     "aiosqlite",
     "asyncpg>=0.29",
+    "psycopg2-binary>=2.9",
     "testcontainers[postgres]>=4.0",
 ]
 
@@ -188,8 +189,8 @@ lint.extend-safe-fixes = ["T20","ERA00"]
 lint.select = ["ALL"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["ANN201", "S101", "DTZ001", "PLR0913", "FA100"]
-"example/*" = ["INP"]
+"tests/*" = ["ANN201", "S101", "DTZ001", "PLR0913", "FA100", "PLC0415", "E501"]
+"example/*" = ["INP", "FA100"]
 
 [tool.ruff.lint.flake8-annotations]
 mypy-init-return = true

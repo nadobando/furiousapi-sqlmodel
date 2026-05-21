@@ -19,7 +19,7 @@ class ItemController(ModelController, prefix="/item", tags=["Items"]):  # type: 
     get_model = ItemRead
 
     async def get(
-        self, id_: str = Path(..., alias="id"), fields: Optional[List["TModelFields"]] = Query(None)
+        self, id_: int = Path(..., alias="id"), fields: Optional[List["TModelFields"]] = Query(None)
     ) -> ItemRead:
         res = await self.repository.get(id_, should_error=True, options=[joinedload(Item.reviews)], fields=fields)
         return ItemRead.model_validate(**dump_with_relationships(res))
