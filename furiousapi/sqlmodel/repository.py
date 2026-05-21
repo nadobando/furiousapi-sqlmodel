@@ -56,7 +56,9 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
 
     @cached_property
     def __primary_keys__(self) -> set[str]:
-        columns: List[Column] = self.__model__.__table__.primary_key.columns
+        # __table__ is attached by SQLAlchemy on table=True models, not declared
+        # on the SQLModel stub.
+        columns: List[Column] = self.__model__.__table__.primary_key.columns  # type: ignore[attr-defined]
         return {column.name for column in columns}
 
     def __primary_values(self, instance: TSQLModel) -> tuple:
@@ -152,11 +154,9 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
 
     async def delete(self, identifiers: tuple, *, commit: bool = True, **kwargs) -> None:
         response = await self.get(identifiers)
-        delete_response = await self.session.delete(response)
+        await self.session.delete(response)
         if commit:
             await self.session.commit()
-
-        return delete_response
 
     async def bulk_create(self, bulk: List[TSQLModel], *, commit: bool = True) -> None:
         deque(map(self.session.add, bulk))
@@ -176,8 +176,8 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
 
     def query(
         self,
-        query: Union[SelectOfScalar, Select] = None,
-        filter_: BinaryExpression = None,
+        query: Optional[Union[SelectOfScalar, Select]] = None,
+        filter_: Optional[BinaryExpression] = None,
         *args,
         **kwargs,
     ) -> Union[SelectOfScalar, Select]:

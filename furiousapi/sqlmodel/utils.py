@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 def collect_relationships(
-    model: SQLModel, entity: Union[SQLModel, BaseModel], visited: Optional[set] = None
+    model: Type[SQLModel], entity: Union[SQLModel, BaseModel], visited: Optional[set] = None
 ) -> Dict[str, SQLModel]:
     rels = {}
     if visited is None:
@@ -25,11 +25,12 @@ def collect_relationships(
     for relationship in model.__sqlmodel_relationships__:
         rel = getattr(entity, relationship, None)
 
-        if rel:
-            class_: SQLModel = getattr(model, relationship).mapper.class_
-            rels[relationship] = class_.model_validate(rel)
-        relation_class = type(rel)
-        if rel and rel.__sqlmodel_relationships__ and relation_class.__name__ not in visited:
+        if not rel:
+            continue
+        class_: SQLModel = getattr(model, relationship).mapper.class_
+        rels[relationship] = class_.model_validate(rel)
+        relation_class: Type[SQLModel] = type(rel)
+        if rel.__sqlmodel_relationships__ and relation_class.__name__ not in visited:
             visited.add(relation_class.__name__)
             rels.update(collect_relationships(relation_class, rel, visited))
 
@@ -53,6 +54,8 @@ def dump_with_relationships(
     path.append(obj_id)
     mapper = sa_inspect(obj.__class__)
     data = obj.model_dump()
+    if mapper is None:
+        return data
 
     for rel in mapper.relationships:
         rel_name = rel.key
@@ -116,5 +119,7 @@ def query_requires_unique(query: Select) -> bool:
 
 
 def model_primary_keys_fields(model: Type[SQLModel]) -> Tuple[InstrumentedAttribute, ...]:
-    columns: List[ReadOnlyColumnCollection] = model.__table__.primary_key.columns
+    # __table__ is added by SQLAlchemy on mapped (table=True) SQLModels at class
+    # creation time; not declared on the SQLModel stub itself.
+    columns: List[ReadOnlyColumnCollection] = model.__table__.primary_key.columns  # type: ignore[attr-defined]
     return tuple(getattr(model, column.name) for column in columns)

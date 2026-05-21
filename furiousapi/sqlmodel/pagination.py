@@ -33,7 +33,7 @@ from furiousapi.db.pagination import (
     BasePagination,
 )
 from furiousapi.pydantic import PYDANTIC_V2
-from sqlalchemy import Integer, asc, desc, func, Row, Operators
+from sqlalchemy import Integer, Row, asc, desc, func
 from sqlalchemy.sql.operators import desc_op, asc_op
 from sqlmodel import SQLModel
 from sqlmodel.sql.expression import select
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from sqlmodel.sql._expression_select_cls import SelectOfScalar
     from furiousapi.core.types import SortingDirection, Sorting
     from sqlalchemy.orm import InstrumentedAttribute
-    from sqlalchemy.sql.elements import Cast, ColumnElement, UnaryExpression
+    from sqlalchemy.sql.elements import Cast, ColumnElement
 
     from sqlmodel.ext.asyncio.session import AsyncSession
     from sqlmodel.sql.base import Executable
@@ -70,10 +70,13 @@ class SQLModelLimitMixin(BasePagination):
         query = query.limit(limit + 1)
         s = "\n" + str(query.compile(compile_kwargs={"literal_binds": True})) + "\n"
         logger.info(f"Page Query:{s}\n")
+        result = await self.__session__.exec(query)
         if query_requires_unique(query):
-            items = (await self.__session__.exec(query)).unique().all()
+            # session.exec returns a TupleResult whose .unique() lives on the
+            # underlying Result; sqlmodel proxies it at runtime.
+            items = result.unique().all()  # type: ignore[attr-defined]
         else:
-            items = (await self.__session__.exec(query)).all()
+            items = result.all()
 
         if limit is not None and len(items) > limit:
             has_next_page = True
@@ -122,7 +125,9 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
             self.__json_dumps__: Callable = pydantic_core.to_json
             self.__json_loads__: Callable = pydantic_core.from_json
         else:
-            config: Type[BaseConfig] = cast("Type[BaseConfig]", model.Config)
+            # v1-only path: SQLModel exposes pydantic v1 Config as a nested class;
+            # v2 stubs don't declare it on the class.
+            config: Type[BaseConfig] = cast("Type[BaseConfig]", model.Config)  # type: ignore[attr-defined]
             self.__json_dumps__: Callable = (hasattr(config, "json_dumps") and config.json_dumps) or json.dumps
             self.__json_loads__: Callable = (hasattr(config, "json_loads") and config.json_loads) or json.loads
         super().__init__(session)
@@ -157,9 +162,13 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
                 key = field.element.key
 
             column_cursors.append((getattr(self.model, key), sort, cursor_value))
-        or_ = [self.get_filter_clause(column_cursors[: i + 1]) for i in range(len(column_cursors))]
+        or_clauses = [
+            clause
+            for i in range(len(column_cursors))
+            if (clause := self.get_filter_clause(column_cursors[: i + 1])) is not None
+        ]
 
-        return sa.or_(*or_)
+        return sa.or_(*or_clauses)
 
     def get_filter_clause(
         self, column_cursors: List[Tuple[InstrumentedAttribute, SortingDirection, Tuple[str, Any]]]
@@ -171,6 +180,8 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
 
         if previous_clauses is None:
             return current_clause
+        if current_clause is None:
+            return previous_clauses
         return sa.and_(previous_clauses, current_clause)
 
     def get_previous_clause(
@@ -178,10 +189,10 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
     ) -> Optional[ColumnElement]:
         if not column_cursors:
             return None
-        clauses = []
+        clauses: List[ColumnElement] = []
         for column, _, value in column_cursors:
             value_ = self.cast(column, value[1])
-            clauses.append(column.isnot_distinct_from(value_))
+            clauses.append(cast("ColumnElement", column.isnot_distinct_from(value_)))
 
         return sa.and_(*clauses)
 
@@ -191,7 +202,7 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
         is_nullable = getattr(column.expression, "nullable", True)
         value_ = value[1]
         if isinstance(value, bool):
-            column: Cast[Integer, InstrumentedAttribute] = sa.cast(column, sa.Integer)
+            column: Cast[Integer] = sa.cast(column, sa.Integer)
             value_ = int(value_)
 
         value_ = self.cast(column, value_)
@@ -220,16 +231,17 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
         cursor: Tuple[Tuple[str, Any], ...],
         items: List[SQLModel],
     ) -> dict:
+        count_query: Any
         if SQLALCHEMY_V2:
             count_query = select(func.count()).select_from(query.subquery())
         else:
-            count_query = query.with_only_columns([func.count(*self.id_fields)])
+            count_query = query.with_only_columns(func.count(*self.id_fields))
 
         count_query.order_by(None)
         query_string = str(count_query.compile(compile_kwargs={"literal_binds": True}))
 
         logger.info(f"Count Query\n {query_string}\n", extra={"query": query_string})
-        total = (await self.__session__.exec(count_query)).first()
+        total = (await self.__session__.exec(count_query)).first() or 0
         index: Optional[int] = 0
         if cursor:
             inverted_ordering = []
@@ -244,7 +256,8 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
             index_query = select(func.count()).select_from(query.filter(filter_clause).subquery())
 
             logger.info(f"Index Query:\n {index_query.compile(compile_kwargs={'literal_binds': True})!s}\n")
-            index = (await self.__session__.exec(index_query)).first() + 1
+            index_count = (await self.__session__.exec(index_query)).first() or 0
+            index = index_count + 1
 
             if self.reversed:
                 before_index = total - index
@@ -258,15 +271,17 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
     async def get_page(
         self, query: Union[Select, Executable], limit: int, next_: Optional[str] = None, **kwargs
     ) -> PaginatedResponse:
-        field_orderings = self.get_field_orderings(query)
+        # The Union accepts Executable for caller flexibility, but the pagination
+        # logic depends on Select-only methods (_order_by_clauses, order_by,
+        # filter). Narrow here.
+        select_query = cast("Select", query)
+        field_orderings = self.get_field_orderings(select_query)
 
-        order_by_clauses = list(query._order_by_clauses)  # noqa: SLF001
+        order_by_clauses = list(select_query._order_by_clauses)  # noqa: SLF001
         all_order_by_clauses = order_by_clauses + field_orderings
         cursor_in = self.parse_cursor(next_, all_order_by_clauses)
 
-        page_query = query
-
-        page_query = page_query.order_by(*field_orderings)
+        page_query = select_query.order_by(*field_orderings)
         if cursor_in is not None:
             page_query = page_query.filter(self.get_filter(all_order_by_clauses, cursor_in))
 
@@ -281,10 +296,10 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
                 item = items[-1][0]
             else:
                 item = items[-1]
-            cursors_out = self.render_cursor(item, all_order_by_clauses)
+            cursors_out = self.render_cursor(cast("SQLModel", item), all_order_by_clauses)
             new_next = (has_next_page and cursors_out) or None
 
-        page_info = await self.get_page_info(query, field_orderings, cursor_in, items)
+        page_info = await self.get_page_info(select_query, field_orderings, cursor_in, items)
         if PYDANTIC_V2:
             result = (
                 PaginatedResponse[self.model].model_construct(
@@ -311,6 +326,8 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
 
     def transform_to_model_fields(self, row_dict: dict) -> dict:
         mapper = sqlalchemy.inspect(self.model)
+        if mapper is None:
+            return row_dict
         for rel in mapper.relationships:
             rel_name = rel.key
             rel_class_name = rel.entity.class_.__name__
@@ -347,7 +364,7 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
         else:
             return value
 
-    def render_cursor(self, item: SQLModel, column_fields: Iterable[UnaryExpression]) -> str:
+    def render_cursor(self, item: SQLModel, column_fields: Iterable[ColumnElement[Any]]) -> str:
         if PYDANTIC_V2:
             cursor_ = []
             for field in column_fields:
@@ -359,12 +376,14 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
                 cursor_.append(dumped_value.decode())
             cursor = tuple(cursor_)
         else:
+            # In v1 mode, column_fields entries are UnaryExpression at runtime;
+            # `.element.key` is the underlying column name.
             cursor = tuple(
-                self.__json_dumps__(getattr(item, field.element.key), default=str) for field in column_fields
+                self.__json_dumps__(getattr(item, field.element.key or ""), default=str) for field in column_fields
             )
         return self.encode_cursor(cursor)
 
-    def get_field_orderings(self, query: Union[Select, SelectOfScalar]) -> list[ColumnElement[Any] | Operators]:
+    def get_field_orderings(self, query: Union[Select, SelectOfScalar]) -> list[ColumnElement[Any]]:
         sorting = list(query._order_by_clauses) or []  # noqa: SLF001
         sorting_fields = set()
         for sort in sorting:
@@ -375,11 +394,14 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
         else:
             op = asc_op
 
-        return [
-            op(getattr(self.model, id_field))
-            for id_field in self.id_fields
-            if (id_field, self.model) not in frozenset(sorting_fields)
-        ]
+        return cast(
+            "list[ColumnElement[Any]]",
+            [
+                op(getattr(self.model, id_field))
+                for id_field in self.id_fields
+                if (id_field, self.model) not in frozenset(sorting_fields)
+            ],
+        )
 
 
 class SQLModelRelayCursorPagination(SQLModelCursorPagination, BaseRelayPagination):
@@ -397,14 +419,13 @@ class SQLModelRelayCursorPagination(SQLModelCursorPagination, BaseRelayPaginatio
         self, query: Union[Select, Executable], limit: int, next_: Optional[str] = None, **kwargs
     ) -> PaginatedResponse:
         current_next = next_
+        select_query = cast("Select", query)
 
-        field_orderings = self.get_field_orderings(query)
+        field_orderings = self.get_field_orderings(select_query)
 
         cursor_in = self.parse_cursor(current_next, field_orderings)
 
-        page_query = query
-
-        page_query = page_query.order_by(*field_orderings)
+        page_query = select_query.order_by(*field_orderings)
         if cursor_in is not None:
             page_query = page_query.filter(self.get_filter(field_orderings, cursor_in))
 
@@ -419,7 +440,7 @@ class SQLModelRelayCursorPagination(SQLModelCursorPagination, BaseRelayPaginatio
             cursors_out = self.make_cursors(items, field_orderings)
             new_next = (has_next_page and cursors_out[-1]) or None
 
-        page_info = await self.get_page_info(query, field_orderings, cursor_in, items)
+        page_info = await self.get_page_info(select_query, field_orderings, cursor_in, items)
         return PaginatedResponse[self.model](
             next=new_next,
             items=items,

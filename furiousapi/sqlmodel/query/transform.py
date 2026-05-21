@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from sqlalchemy.sql.elements import BinaryExpression
 
     # noinspection PyProtectedMember
-    from sqlalchemy.orm.strategy_options import _AbstractLoad
+    from sqlalchemy.orm.strategy_options import _AbstractLoad, _WildcardLoad
 
     ProcessNestedFieldResult = (
         tuple[AliasedClass | Type[SQLModel], _AbstractLoad, list[Any]]
@@ -153,8 +153,8 @@ class SQLRQLTransform(BaseRQLModelTransform):
         model = current_model or self.model
         field_: Optional[InstrumentedAttribute] = None
         for attr in attributes:
-            field_: InstrumentedAttribute = cast("InstrumentedAttribute", operator.attrgetter(attr)(model))
-            if utils.is_relationship(field_) and field_ is not None:
+            field_ = cast("InstrumentedAttribute", operator.attrgetter(attr)(model))
+            if field_ is not None and utils.is_relationship(field_):
                 model = field_.prop.mapper.class_
 
         if field_ is None:
@@ -175,8 +175,9 @@ class SQLRQLTransform(BaseRQLModelTransform):
             else:
                 field = self._get_field(field_name)
                 if utils.is_relationship(field):
-                    eager_option, fields = self._resolve_field_loader(field_name, self.model, "")
-                    self._contains_eager_options.append(eager_option)
+                    relation_option, _fields = self._resolve_field_loader(field_name, self.model, "")
+                    if relation_option is not None:
+                        self._contains_eager_options.append(relation_option)
                     selected_relations.add(field_name)
                 else:
                     selected_root_fields.add(field_name)
@@ -199,6 +200,8 @@ class SQLRQLTransform(BaseRQLModelTransform):
         load_fields: list[InstrumentedAttribute] = []
 
         for field_name, nested_selection in selection.items():
+            child_eager: Optional[_AbstractLoad]
+            child_fields: List[InstrumentedAttribute]
             if nested_selection:
                 selected_relations.add(field_name)
                 current_attr = getattr(current_model, base_field)
@@ -218,7 +221,7 @@ class SQLRQLTransform(BaseRQLModelTransform):
                     selected_fields.add(field_name)
                 load_fields.extend(child_fields)
 
-        local_opts = utils.build_field_options(load_fields)
+        local_opts = utils.build_field_options(cast("List[Union[InstrumentedAttribute, _WildcardLoad]]", load_fields))
         if selected_relations and not local_opts:
             local_opts = [load_only(*[getattr(alias, x.name) for x in model_primary_keys_fields(current_model)])]
 

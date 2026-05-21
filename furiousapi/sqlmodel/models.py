@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Type
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Type, cast
 
 from furiousapi.db.metaclasses import model_query
 from furiousapi.db.models import FuriousPydanticConfig
@@ -19,10 +19,13 @@ class SQLAllOptionalMeta(SQLModelMetaclass):
     def __new__(mcs, name: str, bases: Tuple[type], namespaces: Dict[str, Any], **kwargs) -> Any:
         for base in bases:
             if issubclass(base, SQLModel):
+                model_fields: Dict[str, Any]
                 if PYDANTIC_V2:
-                    model_fields = base.model_fields  # type: ignore[attr-defined]
+                    model_fields = base.model_fields
                 else:
-                    model_fields = base.__fields__  # type: ignore[attr-defined]
+                    # In v1 mode this is a Dict[str, ModelField]; v2 stubs see
+                    # __fields__ as a deprecated method, so widen with cast.
+                    model_fields = cast("Dict[str, Any]", base.__fields__)
                 for k, v in list(model_fields.items()):
                     v: ModelField
                     v.default = None
