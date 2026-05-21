@@ -27,4 +27,4 @@ app.include_router(ItemController.api_router)
 app.include_router(ReviewController.api_router)
 
 if __name__ == "__main__":
-    uvicorn.run(app, port=8081)
+    uvicorn.run(app, port=8080)
