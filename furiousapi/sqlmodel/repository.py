@@ -140,9 +140,13 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
             return response
         return None
 
-    async def delete(self, identifiers: tuple, **kwargs) -> None:
+    async def delete(self, identifiers: tuple, *, commit: bool = True, **kwargs) -> None:
         response = await self.get(identifiers)
-        return await self.session.delete(response)
+        delete_response = await self.session.delete(response)
+        if commit:
+            await self.session.commit()
+
+        return delete_response
 
     async def bulk_create(self, bulk: List[TSQLModel], *, commit: bool = True) -> None:
         deque(map(self.session.add, bulk))
