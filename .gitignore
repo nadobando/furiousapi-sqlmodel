@@ -142,3 +142,12 @@ cython_debug/
 
 node_modules
 .ruff_cache
+
+# OS
+.DS_Store
+
+# IDE
+.pycrunch-config.yaml
+
+# uv lock file — libraries resolve fresh against consumers' constraints
+uv.lock
