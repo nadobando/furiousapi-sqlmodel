@@ -22,10 +22,16 @@ class ItemController(ModelController, prefix="/item", tags=["Items"]):  # type: 
         self, id_: int = Path(..., alias="id"), fields: Optional[List["TModelFields"]] = Query(None)
     ) -> ItemRead:
         res = await self.repository.get(id_, should_error=True, options=[joinedload(Item.reviews)], fields=fields)
-        return ItemRead.model_validate(**dump_with_relationships(res))
+        return ItemRead.model_validate(dump_with_relationships(res))
 
     async def create(self, model: ItemCreate) -> ItemRead:
         return cast("ItemRead", await self.repository.add(cast("Item", model)))
+
+    async def update(self, model: ItemCreate, id_: int = Path(..., alias="id")) -> ItemRead:
+        return cast("ItemRead", await self.repository.update(id_, cast("Item", model)))
+
+    async def delete(self, id_: int = Path(..., alias="id")) -> None:
+        return await self.repository.delete(id_)
 
 
 class ReviewController(ModelController, prefix="/review", tags=["Reviews"]):  # type: ignore[call-arg]

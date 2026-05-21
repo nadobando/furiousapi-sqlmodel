@@ -2,6 +2,9 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
+from furiousapi.api.exception_handling import furious_api_exception_handler, furious_db_exception_handler
+from furiousapi.api.exceptions import FuriousAPIError
+from furiousapi.db.exceptions import FuriousEntityError
 from sqlmodel import SQLModel, create_engine
 
 from example import config
@@ -20,6 +23,8 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_exception_handler(FuriousEntityError, furious_db_exception_handler)
+app.add_exception_handler(FuriousAPIError, furious_api_exception_handler)
 
 app.include_router(ItemController.api_router)
 app.include_router(ReviewController.api_router)

@@ -114,19 +114,11 @@ class TestCrudLifecycle:
         assert "id" in body
         state["crud_item_id"] = body["id"]
 
-    @pytest.mark.xfail(
-        reason="Example's ItemController.get uses `ItemRead.model_validate(**dump_with_relationships(res))` which calls model_validate with kwargs instead of a dict — TypeError. Pre-existing example bug, logged in CONCERNS.md.",
-        strict=True,
-    )
     def test_get(self, client: TestClient) -> None:
         r = client.get(f"/item/{state['crud_item_id']}")
         assert r.status_code == HTTPStatus.OK, r.text
         assert r.json()["name"] == "Widget A"
 
-    @pytest.mark.xfail(
-        reason="Update path triggers SQLAlchemy DBAPI error against Postgres — pre-existing example/repository bug, logged in CONCERNS.md.",
-        strict=True,
-    )
     def test_update(self, client: TestClient) -> None:
         updated = {"name": "Widget A renamed", "description": "first widget"}
         r = client.put(f"/item/{state['crud_item_id']}", json=updated)
@@ -134,15 +126,10 @@ class TestCrudLifecycle:
         r = client.get(f"/item/{state['crud_item_id']}")
         assert r.json()["name"] == "Widget A renamed"
 
-    @pytest.mark.xfail(
-        reason="Delete path triggers SQLAlchemy DBAPI error; depends on get() working. Pre-existing example bug.",
-        strict=True,
-    )
     def test_delete(self, client: TestClient) -> None:
         r = client.delete(f"/item/{state['crud_item_id']}")
         assert r.status_code in (HTTPStatus.OK, HTTPStatus.NO_CONTENT), r.text
 
-    @pytest.mark.xfail(reason="Depends on get() working (model_validate kwargs bug).", strict=True)
     def test_get_404_after_delete(self, client: TestClient) -> None:
         r = client.get(f"/item/{state['crud_item_id']}")
         assert r.status_code == HTTPStatus.NOT_FOUND
@@ -254,10 +241,6 @@ class TestRQLSorts:
 
 
 class TestRelationships:
-    @pytest.mark.xfail(
-        reason="Depends on get() working — same model_validate kwargs bug.",
-        strict=True,
-    )
     def test_create_item_with_review_reference(self, client: TestClient) -> None:
         item_resp = client.post("/item/", json=make_item("with-review"))
         assert item_resp.status_code == HTTPStatus.OK, item_resp.text
@@ -274,10 +257,6 @@ class TestRelationships:
 
 
 class TestErrorPaths:
-    @pytest.mark.xfail(
-        reason="Even the 404 path hits the model_validate kwargs bug before the not-found check fires.",
-        strict=True,
-    )
     def test_get_missing_404(self, client: TestClient) -> None:
         r = client.get("/item/999999999")
         assert r.status_code == HTTPStatus.NOT_FOUND, r.text
