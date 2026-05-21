@@ -3,7 +3,6 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-from enum import Enum
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -23,18 +22,15 @@ from typing import (
 import pydantic_core
 import sqlalchemy
 import sqlalchemy as sa
-from furiousapi.api.error_responses import BadRequestHttpErrorResponse
-from furiousapi.api.exceptions import FuriousAPIError
-from furiousapi.api.pagination import PaginatedResponse, PaginationStrategyEnum
-from furiousapi.core.config import get_settings
-from furiousapi.core.fields import SortingDirection
+from furiousapi.api.pagination import PaginatedResponse
+
 from furiousapi.db.pagination import (
     BaseCursorPagination,
     BaseRelayPagination,
     Cursor,
     OffsetPagination,
     PagePagination,
-    PaginatorMixin,
+    BasePagination,
 )
 from furiousapi.pydantic import PYDANTIC_V2
 from sqlalchemy import Integer, asc, desc, func, Row, Operators
@@ -46,7 +42,7 @@ from furiousapi.sqlmodel.utils import query_requires_unique
 
 if TYPE_CHECKING:
     from sqlmodel.sql._expression_select_cls import SelectOfScalar
-    from furiousapi.db.fields import SortableFieldEnum
+    from furiousapi.core.types import SortingDirection, Sorting
     from sqlalchemy.orm import InstrumentedAttribute
     from sqlalchemy.sql.elements import Cast, ColumnElement, UnaryExpression
 
@@ -60,18 +56,13 @@ if TYPE_CHECKING:
         from pydantic import BaseConfig
 
 SQLALCHEMY_V2 = int(sqlalchemy.__version__[0]) >= 2  # noqa: PLR2004
-DEFAULT_PAGE_SIZE = get_settings().pagination.default_size
-logger = logging.getLogger(__name__)
 
-SORTING_FUNCS_MAPPING = {
-    SortingDirection.DESCENDING: desc,
-    SortingDirection.ASCENDING: asc,
-}
+logger = logging.getLogger(__name__)
 
 _NULL = str(sa.null())
 
 
-class SQLModelLimitMixin(PaginatorMixin):
+class SQLModelLimitMixin(BasePagination):
     def __init__(self, session: AsyncSession) -> None:
         self.__session__ = session
 
@@ -94,9 +85,8 @@ class SQLModelLimitMixin(PaginatorMixin):
 
 
 class SQLModelOffsetPaginatorMixin(SQLModelLimitMixin):
-    def __init__(self, session: AsyncSession, model: Type[SQLModel]):
+    def __init__(self, session: AsyncSession):
         super().__init__(session)
-        self.model = model
 
     async def get_page(  # type: ignore[override]
         self, query: Select, limit: int, next_: int = 0, **kwargs
@@ -161,13 +151,13 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
         except TypeError:
             return None
 
-    def get_filter(self, field_orderings: List[SortableFieldEnum], cursor: Cursor) -> ColumnElement:
+    def get_filter(self, field_orderings: List[Sorting], cursor: Cursor) -> ColumnElement:
         column_cursors = []
         for field, cursor_value in zip(field_orderings, cursor):
             if field.modifier == asc_op:
-                sort = SortingDirection.ASCENDING
+                sort = "asc"
             else:
-                sort = SortingDirection.DESCENDING
+                sort = "desc"
 
             if field.element.key is None:
                 key = field.element.element.key
@@ -214,7 +204,7 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
 
         value_ = self.cast(column, value_)
 
-        if asc == SortingDirection.ASCENDING:
+        if asc == "asc":
             if value_ is None:
                 return None
             if value_ is not None:
@@ -234,7 +224,7 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
     async def get_page_info(
         self,
         query: Select,
-        field_orderings: List[SortableFieldEnum],
+        field_orderings: List[Sorting],
         cursor: Tuple[Tuple[str, Any], ...],
         items: List[SQLModel],
     ) -> dict:
@@ -279,14 +269,14 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
         field_orderings = self.get_field_orderings(query)
 
         order_by_clauses = list(query._order_by_clauses)  # noqa: SLF001
-        all_order_by_claues = order_by_clauses + field_orderings
-        cursor_in = self.parse_cursor(next_, all_order_by_claues)
+        all_order_by_clauses = order_by_clauses + field_orderings
+        cursor_in = self.parse_cursor(next_, all_order_by_clauses)
 
         page_query = query
 
         page_query = page_query.order_by(*field_orderings)
         if cursor_in is not None:
-            page_query = page_query.filter(self.get_filter(all_order_by_claues, cursor_in))
+            page_query = page_query.filter(self.get_filter(all_order_by_clauses, cursor_in))
 
         items, has_next_page = await super().get_page(page_query, limit, next_=next_)
 
@@ -299,7 +289,7 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
                 item = items[-1][0]
             else:
                 item = items[-1]
-            cursors_out = self.render_cursor(item, all_order_by_claues)
+            cursors_out = self.render_cursor(item, all_order_by_clauses)
             new_next = (has_next_page and cursors_out) or None
 
         page_info = await self.get_page_info(query, field_orderings, cursor_in, items)
@@ -310,9 +300,9 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
                     items=items,
                     total=page_info["total"],
                     index=page_info["index"],
-                ),
-                page_query,
-                page_info,
+                )
+                # page_query,
+                # page_info,
             )
         else:
             result = (
@@ -321,9 +311,9 @@ class SQLModelCursorPagination(SQLModelLimitMixin, BaseCursorPagination):
                     items=items,
                     total=page_info["total"],
                     index=page_info["index"],
-                ),
-                page_query,
-                page_info,
+                )
+                # page_query,
+                # page_info,
             )
         return result
 
@@ -444,19 +434,3 @@ class SQLModelRelayCursorPagination(SQLModelCursorPagination, BaseRelayPaginatio
             total=page_info["total"],
             index=page_info["index"],
         )
-
-
-PAGINATION_MAPPING = {
-    PaginationStrategyEnum.OFFSET: SQLModelOffsetPagination,
-    PaginationStrategyEnum.CURSOR: SQLModelCursorPagination,
-}
-
-
-def get_paginator(
-    strategy: Union[PaginationStrategyEnum, str] = PaginationStrategyEnum.CURSOR,
-) -> Union[Type[SQLModelOffsetPagination], Type[SQLModelCursorPagination]]:
-    if not isinstance(strategy, Enum):
-        strategy = PaginationStrategyEnum(strategy)
-    if not (paginator := PAGINATION_MAPPING.get(strategy)):
-        raise FuriousAPIError(BadRequestHttpErrorResponse(detail=f"pagination strategy {strategy} not found"))
-    return paginator
