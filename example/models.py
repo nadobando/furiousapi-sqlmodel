@@ -8,7 +8,7 @@ class BaseReview(SQLModel):
 
 
 class Review(BaseReview, table=True):  # type: ignore[call-arg]
-    id: int = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     item_id: int = Field(foreign_key="item.id")
     item: Optional["Item"] = Relationship(back_populates="reviews", sa_relationship_kwargs={"uselist": False})
 
@@ -31,7 +31,7 @@ class BaseItem(SQLModel):
 
 
 class Item(BaseItem, table=True):  # type: ignore[call-arg]
-    id: int = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     reviews: Optional[List["Review"]] = Relationship(back_populates="item", sa_relationship_kwargs={"uselist": True})
 
 

@@ -238,6 +238,16 @@ class TestRelationships:
         assert get_item.status_code == HTTPStatus.OK
         assert get_item.json()["name"] == "with-review"
 
+    def test_create_review_via_create_model(self, client: TestClient) -> None:
+        """Regression for CreateModelMixin auto-converting `create_model` to the entity."""
+        item_resp = client.post("/item/", json=make_item("review-target"))
+        assert item_resp.status_code == HTTPStatus.OK, item_resp.text
+        item_id = item_resp.json()["id"]
+
+        review_resp = client.post("/review/", json={"text": "great widget", "item_id": item_id})
+        assert review_resp.status_code == HTTPStatus.OK, review_resp.text
+        assert review_resp.json()["text"] == "great widget"
+
 
 # ---------------------------------------------------------------------------
 # Error paths
