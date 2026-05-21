@@ -7,7 +7,6 @@ from typing import (
     Any,
     List,
     Optional,
-    Tuple,
     Type,
     TypeVar,
     Union,
@@ -18,26 +17,21 @@ from typing import (
 )
 
 from fastapi._compat import PYDANTIC_V2
-from furiousapi.db import BaseRepository, RepositoryConfig
+from furiousapi.api.pagination import PaginationStrategyEnum
+from furiousapi.db import BaseRepository
 from furiousapi.db import EntityAlreadyExistsError, EntityNotFoundError
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import load_only
 from sqlmodel import SQLModel, select
 
-from furiousapi.sqlmodel.models import SQLAllOptionalMeta, sql_model_query
-from furiousapi.sqlmodel.pagination import get_paginator
-from furiousapi.sqlmodel.utils import collect_relationships, dump_with_relationships
+from furiousapi.sqlmodel.pagination import SQLModelCursorPagination, SQLModelOffsetPagination
+from furiousapi.sqlmodel.utils import collect_relationships
 
 if TYPE_CHECKING:
-    from sqlalchemy import Column
+    from sqlalchemy import Column, BinaryExpression
     from collections.abc import Iterable
     from sqlmodel.sql._expression_select_cls import SelectOfScalar, Select
-    from furiousapi.core.types import TModelFields, TEntity
-    from furiousapi.api.pagination import (
-        AllPaginationStrategies,
-        PaginatedResponse,
-    )
+    from furiousapi.core.types import TModelFields
     from sqlmodel.ext.asyncio.session import AsyncSession
 
 TSQLModel = TypeVar("TSQLModel", bound=SQLModel)
@@ -50,20 +44,23 @@ def _get_model_fields(model: Type[TSQLModel], fields: Iterable[TModelFields]) ->
 class BaseSQLRepository(BaseRepository[TSQLModel]):
     __model__: Type[TSQLModel]
 
-    class Config(RepositoryConfig):
-        model_to_query = sql_model_query
-        filter_model = SQLAllOptionalMeta
+    def __init_paginators__(self) -> None:
+        self.__paginators__[PaginationStrategyEnum.CURSOR] = SQLModelCursorPagination(
+            self.__primary_keys__, self.session, self.__model__
+        )
+        self.__paginators__[PaginationStrategyEnum.OFFSET] = SQLModelOffsetPagination(self.session)
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+        super().__init__()
 
     @cached_property
-    def __primary_keys(self) -> Tuple[str, ...]:
+    def __primary_keys__(self) -> set[str]:
         columns: List[Column] = self.__model__.__table__.primary_key.columns  # type: ignore[attr-defined]
-        return tuple(column.name for column in columns)
+        return {column.name for column in columns}
 
     def __primary_values(self, instance: TSQLModel) -> tuple:
-        return tuple(getattr(instance, i) for i in self.__primary_keys)
+        return tuple(getattr(instance, i) for i in self.__primary_keys__)
 
     @overload
     async def get(
@@ -131,7 +128,7 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
 
     async def update(self, identifiers: Any, entity: TSQLModel, *, commit: bool = True) -> Optional[TSQLModel]:
         response = await self.get(identifiers)
-        for key, value in entity.model_dump(exclude_unset=True, exclude=set(self.__primary_keys)).items():
+        for key, value in entity.model_dump(exclude_unset=True, exclude=set(self.__primary_keys__)).items():
             setattr(response, key, value)
         self.session.add(response)
         if commit:
@@ -164,63 +161,21 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
         if commit:
             await self.session.commit()
 
-    @overload
-    async def query(
+    def query(
         self,
-        query: SelectOfScalar | Select,
-        pagination: "AllPaginationStrategies",
+        query: Union[SelectOfScalar, Select] = None,
+        filter_: BinaryExpression = None,
         *args,
-        as_model: bool = True,
-        return_cursor: Literal[False] = False,
         **kwargs,
-    ) -> PaginatedResponse[TEntity]: ...
-
-    @overload
-    async def query(
-        self,
-        query: SelectOfScalar | Select,
-        pagination: Literal[None] = None,
-        *args,
-        as_model: bool = True,
-        return_cursor: Literal[False] = False,
-        **kwargs,
-    ) -> Iterable[TEntity]: ...
-
-    async def query(
-        self,
-        query: SelectOfScalar | Select,
-        pagination: Optional["AllPaginationStrategies"] = None,
-        *args,
-        as_model: bool = True,
-        return_cursor: bool = False,
-        **kwargs,
-    ) -> Union[Iterable[TEntity], PaginatedResponse[TEntity]]:
+    ) -> Union[SelectOfScalar, Select]:
         if query is None:
             query = select(cast("Type[SQLModel]", self.__model__))
         elif not query.is_select:
             raise AssertionError("Only Select queries are available through query")
+        if filter_:
+            query = query.where(filter_)
 
-        if pagination is not None:
-            init_params = {
-                "session": self.session,
-                "id_fields": self.__primary_keys,
-                "model": self.__model__,
-            }
+        return query
 
-            paginator = get_paginator(pagination.pagination_type)(**init_params)  # type: ignore[arg-type]
-
-            result, query, page_info = await paginator.get_page(query, pagination.limit, pagination.next)
-
-            if result.items and not as_model:
-                for i, item in enumerate(result.items):
-                    result.items[i] = dump_with_relationships(item)
-
-            return result
-
-        result = await self.session.exec(query)
-        if not return_cursor:
-            result = result.all()
-            if not as_model:
-                result = [dump_with_relationships(i) for i in result]
-
-        return result
+    async def execute(self, query: Union[SelectOfScalar, Select]) -> Iterable[TSQLModel]:
+        return await self.session.exec(query)
