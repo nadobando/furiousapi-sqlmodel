@@ -119,12 +119,25 @@ class TestCrudLifecycle:
         assert r.status_code == HTTPStatus.OK, r.text
         assert r.json()["name"] == "Widget A"
 
-    def test_update(self, client: TestClient) -> None:
-        updated = {"name": "Widget A renamed", "description": "first widget"}
-        r = client.put(f"/item/{state['crud_item_id']}", json=updated)
+    def test_replace_put(self, client: TestClient) -> None:
+        """PUT — full replacement; omitted fields revert to defaults."""
+        full = {"name": "Widget A renamed", "description": "first widget"}
+        r = client.put(f"/item/{state['crud_item_id']}", json=full)
         assert r.status_code == HTTPStatus.OK, r.text
         r = client.get(f"/item/{state['crud_item_id']}")
         assert r.json()["name"] == "Widget A renamed"
+
+    def test_patch_partial(self, client: TestClient) -> None:
+        """PATCH route exists and accepts a body matching the patch_model.
+
+        See note in beanie's analogue: true partial body needs an all-Optional
+        patch_model; tracked in CONCERNS.md.
+        """
+        full = {"name": "Widget A patched", "description": "first widget"}
+        r = client.patch(f"/item/{state['crud_item_id']}", json=full)
+        assert r.status_code == HTTPStatus.OK, r.text
+        body = client.get(f"/item/{state['crud_item_id']}").json()
+        assert body["name"] == "Widget A patched"
 
     def test_delete(self, client: TestClient) -> None:
         r = client.delete(f"/item/{state['crud_item_id']}")

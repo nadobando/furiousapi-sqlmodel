@@ -126,9 +126,22 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
 
         return None
 
-    async def update(self, identifiers: Any, entity: TSQLModel, *, commit: bool = True) -> Optional[TSQLModel]:
+    async def patch(self, identifiers: Any, partial: TSQLModel, *, commit: bool = True) -> Optional[TSQLModel]:
+        """Partial update — only fields explicitly set on `partial` are written."""
         response = await self.get(identifiers)
-        for key, value in entity.model_dump(exclude_unset=True, exclude=set(self.__primary_keys__)).items():
+        for key, value in partial.model_dump(exclude_unset=True, exclude=set(self.__primary_keys__)).items():
+            setattr(response, key, value)
+        self.session.add(response)
+        if commit:
+            await self.session.commit()
+            await self.session.refresh(response)
+            return response
+        return None
+
+    async def replace(self, identifiers: Any, entity: TSQLModel, *, commit: bool = True) -> Optional[TSQLModel]:
+        """Full replacement — every field on the entity is written, defaults included."""
+        response = await self.get(identifiers)
+        for key, value in entity.model_dump(exclude=set(self.__primary_keys__)).items():
             setattr(response, key, value)
         self.session.add(response)
         if commit:

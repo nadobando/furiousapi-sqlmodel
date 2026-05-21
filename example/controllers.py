@@ -33,8 +33,11 @@ class ItemController(ModelController, prefix="/item", tags=["Items"]):  # type: 
     async def create(self, model: ItemCreate) -> ItemRead:
         return cast("ItemRead", await self.repository.add(cast("Item", model)))
 
-    async def update(self, model: ItemCreate, id_: int = Path(..., alias="id")) -> ItemRead:
-        return cast("ItemRead", await self.repository.update(id_, cast("Item", model)))
+    async def replace(self, model: ItemCreate, id_: int = Path(..., alias="id")) -> ItemRead:
+        return cast("ItemRead", await self.repository.replace(id_, cast("Item", model)))
+
+    async def patch(self, model: ItemCreate, id_: int = Path(..., alias="id")) -> ItemRead:
+        return cast("ItemRead", await self.repository.patch(id_, cast("Item", model)))
 
     async def delete(self, id_: int = Path(..., alias="id")) -> None:
         return await self.repository.delete(id_)
