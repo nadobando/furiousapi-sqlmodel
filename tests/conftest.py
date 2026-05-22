@@ -1,4 +1,3 @@
-import asyncio
 import contextlib
 import sys
 import traceback
@@ -21,16 +20,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from furiousapi.sqlmodel.query.model import RQLModelSQL
 from tests.models import MyRepository, MyModelCreate, MyModel, PAGINATION, CACHE_KEY, Foreign, Foo, ForeignRepository
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 class DebugStdout:

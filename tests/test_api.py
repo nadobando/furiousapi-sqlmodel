@@ -192,5 +192,5 @@ async def test_query(
     )
     await create_model(model1, "/model1", test_client)
     caplog.set_level(logging.DEBUG, logger="furiousapi.sqlmodel.query.transform")
-    test_client.get(f"/model1?q={rql}")
+    test_client.get("/model1", params={"q": rql})
     assert caplog.messages[0].strip() == sql.strip().replace("\t", "")
