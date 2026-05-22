@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from logging import getLogger
-from typing import Type
 
 from furiousapi.core.types import TEntity
 from furiousapi.rql.models import ModelRQL
@@ -12,5 +11,5 @@ LOGGER = getLogger(__name__)
 
 
 class RQLModelSQL(ModelRQL[TEntity]):
-    __model__: Type[TEntity]
+    __model__: type[TEntity]
     __transformer__ = SQLRQLTransform

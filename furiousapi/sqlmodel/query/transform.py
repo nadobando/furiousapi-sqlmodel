@@ -3,7 +3,7 @@ from __future__ import annotations
 import operator
 from logging import getLogger
 from typing import TYPE_CHECKING, cast
-from typing import Type, List, Union, Dict, Any, Tuple, Optional
+from typing import Any
 
 from furiousapi.rql.transform import BaseRQLModelTransform
 from sqlalchemy.orm import InstrumentedAttribute, contains_eager, aliased, Load
@@ -30,23 +30,23 @@ if TYPE_CHECKING:
     from sqlalchemy.orm.strategy_options import _AbstractLoad, _WildcardLoad
 
     ProcessNestedFieldResult = (
-        tuple[AliasedClass | Type[SQLModel], _AbstractLoad, list[Any]]
-        | tuple[AliasedClass | Type[SQLModel], None, list[_AbstractLoad]]
+        tuple[AliasedClass | type[SQLModel], _AbstractLoad, list[Any]]
+        | tuple[AliasedClass | type[SQLModel], None, list[_AbstractLoad]]
     )
 
 LOGGER = getLogger(__name__)
 
 
 class SQLRQLTransform(BaseRQLModelTransform):
-    model: Type[SQLModel]
-    _options: List
-    _where: List
+    model: type[SQLModel]
+    _options: list
+    _where: list
 
-    _joins: List
-    _aliases: Dict[str, Union[AliasedClass, Type[SQLModel]]]
-    _contains_eager_options: List
+    _joins: list
+    _aliases: dict[str, AliasedClass | type[SQLModel]]
+    _contains_eager_options: list
 
-    def __init__(self, model: Type[SQLModel], *args, **kwargs) -> None:
+    def __init__(self, model: type[SQLModel], *args, **kwargs) -> None:
         super().__init__(model, *args, **kwargs)
         self._options = []
         self._where = []
@@ -74,10 +74,10 @@ class SQLRQLTransform(BaseRQLModelTransform):
         return q
 
     @staticmethod
-    def search_term(s: Tuple[Token]) -> _FunctionGenerator:
+    def search_term(s: tuple[Token]) -> _FunctionGenerator:
         return getattr(func, s[0])
 
-    def searching(self, s: Tuple[_FunctionGenerator, str, str]) -> Function:
+    def searching(self, s: tuple[_FunctionGenerator, str, str]) -> Function:
         if not isinstance(s[2], str):
             raise TypeError("value must be string")
         field = self._get_field(s[1])
@@ -90,7 +90,7 @@ class SQLRQLTransform(BaseRQLModelTransform):
             raise AttributeError("attribute must be string attribute")
         return s[0](attr, s[2])
 
-    def comp(self, term: Tuple[str, str, Any]) -> BinaryExpression:
+    def comp(self, term: tuple[str, str, Any]) -> BinaryExpression:
         op = super().comp(term)[0]
         field_path = term[1]
         value = term[2]
@@ -101,13 +101,13 @@ class SQLRQLTransform(BaseRQLModelTransform):
 
         return getattr(attr, op)(value)
 
-    def and_(self, terms: List[BinaryExpression]) -> ColumnElement[bool]:
+    def and_(self, terms: list[BinaryExpression]) -> ColumnElement[bool]:
         return and_(*terms)
 
-    def or_(self, terms: List[BinaryExpression]) -> ColumnElement[bool]:
+    def or_(self, terms: list[BinaryExpression]) -> ColumnElement[bool]:
         return or_(*terms)
 
-    def listing(self, term: Tuple[str, str, Any]) -> BinaryExpression:
+    def listing(self, term: tuple[str, str, Any]) -> BinaryExpression:
         field_path = term[1]
         path, _, field_name = field_path.rpartition(".")
         alias = self._get_or_create_alias(path, self.model)
@@ -115,10 +115,10 @@ class SQLRQLTransform(BaseRQLModelTransform):
         return field.in_(term[2:])
 
     @staticmethod
-    def not_(token: List[BinaryExpression]) -> BinaryExpression:
+    def not_(token: list[BinaryExpression]) -> BinaryExpression:
         return ~token[0]
 
-    def _build_sort_clauses(self) -> List[ColumnElement]:
+    def _build_sort_clauses(self) -> list[ColumnElement]:
         clauses = []
         for path, direction in self.__sorting_fields__:
             sort_path, _, field = path.rpartition(".")
@@ -148,10 +148,10 @@ class SQLRQLTransform(BaseRQLModelTransform):
                 eager = self._build_eager_chain(path, field)
                 self._contains_eager_options.append(eager)
 
-    def _get_field(self, field: str, current_model: Optional[Type[SQLModel]] = None) -> InstrumentedAttribute:
+    def _get_field(self, field: str, current_model: type[SQLModel] | None = None) -> InstrumentedAttribute:
         attributes = field.split(".")
         model = current_model or self.model
-        field_: Optional[InstrumentedAttribute] = None
+        field_: InstrumentedAttribute | None = None
         for attr in attributes:
             field_ = cast("InstrumentedAttribute", operator.attrgetter(attr)(model))
             if field_ is not None and utils.is_relationship(field_):
@@ -161,7 +161,7 @@ class SQLRQLTransform(BaseRQLModelTransform):
             raise AssertionError
         return field_
 
-    def _process_select(self, sel: Dict) -> None:
+    def _process_select(self, sel: dict) -> None:
         selected_root_fields = set()
         selected_relations = set()
         for field_name, value in sel.items():
@@ -188,8 +188,8 @@ class SQLRQLTransform(BaseRQLModelTransform):
             self._options.append(load_only(*model_primary_keys_fields(self.model)))
 
     def _process_nested_fields(
-        self, base_field: str, selection: Dict, current_model: Type[SQLModel], prefix: str = ""
-    ) -> Tuple[_AbstractLoad, List[InstrumentedAttribute]]:
+        self, base_field: str, selection: dict, current_model: type[SQLModel], prefix: str = ""
+    ) -> tuple[_AbstractLoad, list[InstrumentedAttribute]]:
         selected_fields = set()
         selected_relations = set()
 
@@ -200,8 +200,8 @@ class SQLRQLTransform(BaseRQLModelTransform):
         load_fields: list[InstrumentedAttribute] = []
 
         for field_name, nested_selection in selection.items():
-            child_eager: Optional[_AbstractLoad]
-            child_fields: List[InstrumentedAttribute]
+            child_eager: _AbstractLoad | None
+            child_fields: list[InstrumentedAttribute]
             if nested_selection:
                 selected_relations.add(field_name)
                 current_attr = getattr(current_model, base_field)
@@ -221,7 +221,7 @@ class SQLRQLTransform(BaseRQLModelTransform):
                     selected_fields.add(field_name)
                 load_fields.extend(child_fields)
 
-        local_opts = utils.build_field_options(cast("List[Union[InstrumentedAttribute, _WildcardLoad]]", load_fields))
+        local_opts = utils.build_field_options(cast("list[InstrumentedAttribute | _WildcardLoad]", load_fields))
         if selected_relations and not local_opts:
             local_opts = [load_only(*[getattr(alias, x.name) for x in model_primary_keys_fields(current_model)])]
 
@@ -235,8 +235,8 @@ class SQLRQLTransform(BaseRQLModelTransform):
         return contains_eager(relationship_attr.of_type(alias)).options(inner), load_fields
 
     def _resolve_field_loader(
-        self, field_name: str, alias: Union[AliasedClass, Type[SQLModel]], path: str
-    ) -> tuple[Optional[_AbstractLoad], list[Any]]:
+        self, field_name: str, alias: AliasedClass | type[SQLModel], path: str
+    ) -> tuple[_AbstractLoad | None, list[Any]]:
         if field_name == "*":
             return None, [undefer("*")]
         field = getattr(alias, field_name)
@@ -271,15 +271,15 @@ class SQLRQLTransform(BaseRQLModelTransform):
         return cur
 
     # region: alias & join resolution
-    def _get_alias(self, path: str) -> Optional[AliasedClass]:
-        return cast("Optional[AliasedClass]", self._aliases.get(path))
+    def _get_alias(self, path: str) -> AliasedClass | None:
+        return cast("AliasedClass | None", self._aliases.get(path))
 
-    def _get_or_create_alias(self, path: str, model: Type[SQLModel]) -> AliasedClass:
+    def _get_or_create_alias(self, path: str, model: type[SQLModel]) -> AliasedClass:
         return self._get_alias(path) or self._create_alias(path, model)
 
     # endregion
 
-    def _create_alias(self, path: str, model: Type[SQLModel]) -> AliasedClass:
+    def _create_alias(self, path: str, model: type[SQLModel]) -> AliasedClass:
         parts = path.split(".")
         parent_path = ".".join(parts[:-1])
         rel_name = parts[-1]

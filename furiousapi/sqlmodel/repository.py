@@ -5,16 +5,12 @@ from functools import cached_property
 from typing import (
     TYPE_CHECKING,
     Any,
-    List,
-    Optional,
-    Type,
     TypeVar,
-    Union,
     cast,
-    Iterable,
     overload,
     Literal,
 )
+from collections.abc import Iterable
 
 from fastapi._compat import PYDANTIC_V2
 from furiousapi.api.pagination import PaginationStrategyEnum
@@ -37,12 +33,12 @@ if TYPE_CHECKING:
 TSQLModel = TypeVar("TSQLModel", bound=SQLModel)
 
 
-def _get_model_fields(model: Type[TSQLModel], fields: Iterable[TModelFields]) -> Iterable[str]:
+def _get_model_fields(model: type[TSQLModel], fields: Iterable[TModelFields]) -> Iterable[str]:
     return (getattr(model, f.value) for f in fields)
 
 
 class BaseSQLRepository(BaseRepository[TSQLModel]):
-    __model__: Type[TSQLModel]
+    __model__: type[TSQLModel]
 
     def __init_paginators__(self) -> None:
         self.__paginators__[PaginationStrategyEnum.CURSOR] = SQLModelCursorPagination(
@@ -58,7 +54,7 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
     def __primary_keys__(self) -> set[str]:
         # __table__ is attached by SQLAlchemy on table=True models, not declared
         # on the SQLModel stub.
-        columns: List[Column] = self.__model__.__table__.primary_key.columns  # type: ignore[attr-defined]
+        columns: list[Column] = self.__model__.__table__.primary_key.columns  # type: ignore[attr-defined]
         return {column.name for column in columns}
 
     def __primary_values(self, instance: TSQLModel) -> tuple:
@@ -67,31 +63,31 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
     @overload
     async def get(
         self,
-        identifiers: Union[int, str, dict[str, Any], tuple[Any]],
-        fields: Optional[Iterable[TModelFields]] = None,
+        identifiers: int | str | dict[str, Any] | tuple[Any],
+        fields: Iterable[TModelFields] | None = None,
         *,
         should_error: Literal[True] = True,
-        options: Optional[List] = None,
+        options: list | None = None,
     ) -> TSQLModel: ...
 
     @overload
     async def get(
         self,
-        identifiers: Union[int, str, dict[str, Any], tuple[Any]],
-        fields: Optional[Iterable[TModelFields]] = None,
+        identifiers: int | str | dict[str, Any] | tuple[Any],
+        fields: Iterable[TModelFields] | None = None,
         *,
-        options: Optional[List] = None,
+        options: list | None = None,
         should_error: Literal[False] = False,
-    ) -> Optional[TSQLModel]: ...
+    ) -> TSQLModel | None: ...
 
     async def get(
         self,
-        identifiers: Union[int, str, dict[str, Any], tuple[Any]],
-        fields: Optional[Iterable[TModelFields]] = None,
+        identifiers: int | str | dict[str, Any] | tuple[Any],
+        fields: Iterable[TModelFields] | None = None,
         *,
         should_error: bool = True,
-        options: Optional[List] = None,
-    ) -> Optional[TSQLModel]:
+        options: list | None = None,
+    ) -> TSQLModel | None:
         options = options or []
 
         if fields:
@@ -105,7 +101,7 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
 
         return record
 
-    async def add(self, entity: TSQLModel, *, commit: bool = True) -> Optional[TSQLModel]:
+    async def add(self, entity: TSQLModel, *, commit: bool = True) -> TSQLModel | None:
         d = entity.model_dump(exclude=set(self.__model__.__sqlmodel_relationships__.keys()))
         rels = collect_relationships(self.__model__, entity)
         if PYDANTIC_V2:
@@ -128,7 +124,7 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
 
         return None
 
-    async def patch(self, identifiers: Any, partial: TSQLModel, *, commit: bool = True) -> Optional[TSQLModel]:
+    async def patch(self, identifiers: Any, partial: TSQLModel, *, commit: bool = True) -> TSQLModel | None:
         """Partial update — only fields explicitly set on `partial` are written."""
         response = await self.get(identifiers)
         for key, value in partial.model_dump(exclude_unset=True, exclude=set(self.__primary_keys__)).items():
@@ -140,7 +136,7 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
             return response
         return None
 
-    async def replace(self, identifiers: Any, entity: TSQLModel, *, commit: bool = True) -> Optional[TSQLModel]:
+    async def replace(self, identifiers: Any, entity: TSQLModel, *, commit: bool = True) -> TSQLModel | None:
         """Full replacement — every field on the entity is written, defaults included."""
         response = await self.get(identifiers)
         for key, value in entity.model_dump(exclude=set(self.__primary_keys__)).items():
@@ -158,31 +154,31 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
         if commit:
             await self.session.commit()
 
-    async def bulk_create(self, bulk: List[TSQLModel], *, commit: bool = True) -> None:
+    async def bulk_create(self, bulk: list[TSQLModel], *, commit: bool = True) -> None:
         deque(map(self.session.add, bulk))
         if commit:
             return await self.session.commit()
         return None
 
-    async def bulk_delete(self, bulk: List[Union[TSQLModel, Any]], *, commit: bool = True) -> None:
+    async def bulk_delete(self, bulk: list[TSQLModel | Any], *, commit: bool = True) -> None:
         deque(map(self.session.delete, bulk))
         if commit:
             await self.session.commit()
 
-    async def bulk_update(self, bulk: List[TSQLModel], *, commit: bool = True) -> Any:
+    async def bulk_update(self, bulk: list[TSQLModel], *, commit: bool = True) -> Any:
         deque(map(self.session.add, bulk))
         if commit:
             await self.session.commit()
 
     def query(
         self,
-        query: Optional[Union[SelectOfScalar, Select]] = None,
-        filter_: Optional[BinaryExpression] = None,
+        query: SelectOfScalar | Select | None = None,
+        filter_: BinaryExpression | None = None,
         *args,
         **kwargs,
-    ) -> Union[SelectOfScalar, Select]:
+    ) -> SelectOfScalar | Select:
         if query is None:
-            query = select(cast("Type[SQLModel]", self.__model__))
+            query = select(cast("type[SQLModel]", self.__model__))
         elif not query.is_select:
             raise AssertionError("Only Select queries are available through query")
         if filter_:
@@ -190,5 +186,5 @@ class BaseSQLRepository(BaseRepository[TSQLModel]):
 
         return query
 
-    async def execute(self, query: Union[SelectOfScalar, Select]) -> Iterable[TSQLModel]:
+    async def execute(self, query: SelectOfScalar | Select) -> Iterable[TSQLModel]:
         return await self.session.exec(query)

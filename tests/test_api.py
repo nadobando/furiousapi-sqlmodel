@@ -1,7 +1,7 @@
 import datetime
 import logging
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import pytest
 from fastapi import FastAPI
@@ -162,7 +162,7 @@ async def test_delete(test_client: "TestClient", path: str) -> None:
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 
-async def create_model(model: "SQLModel", path: str, test_client: "TestClient") -> Optional[int]:
+async def create_model(model: "SQLModel", path: str, test_client: "TestClient") -> int | None:
     if PYDANTIC_V2:
         dump = model.model_dump(by_alias=True, mode="json")
         create_response = test_client.post(path, json=dump)

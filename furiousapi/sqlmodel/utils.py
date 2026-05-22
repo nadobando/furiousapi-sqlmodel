@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from typing import Optional, List, Type, Dict, Any, Union, Tuple
+from typing import Any
 from typing import TYPE_CHECKING
 
 import sqlalchemy
@@ -17,8 +17,8 @@ if TYPE_CHECKING:
 
 
 def collect_relationships(
-    model: Type[SQLModel], entity: Union[SQLModel, BaseModel], visited: Optional[set] = None
-) -> Dict[str, SQLModel]:
+    model: type[SQLModel], entity: SQLModel | BaseModel, visited: set | None = None
+) -> dict[str, SQLModel]:
     rels = {}
     if visited is None:
         visited = set()
@@ -29,7 +29,7 @@ def collect_relationships(
             continue
         class_: SQLModel = getattr(model, relationship).mapper.class_
         rels[relationship] = class_.model_validate(rel)
-        relation_class: Type[SQLModel] = type(rel)
+        relation_class: type[SQLModel] = type(rel)
         if rel.__sqlmodel_relationships__ and relation_class.__name__ not in visited:
             visited.add(relation_class.__name__)
             rels.update(collect_relationships(relation_class, rel, visited))
@@ -40,11 +40,11 @@ def collect_relationships(
 def dump_with_relationships(
     obj: SQLModel,
     *,
-    path: Optional[List[int]] = None,
-    parent_model: Optional[Type[SQLModel]] = None,
-    parent_rel_name: Optional[str] = None,
+    path: list[int] | None = None,
+    parent_model: type[SQLModel] | None = None,
+    parent_rel_name: str | None = None,
     indent: int = 0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     path = path or []
     obj_id = id(obj)
 
@@ -118,8 +118,8 @@ def query_requires_unique(query: Select) -> bool:
     return False
 
 
-def model_primary_keys_fields(model: Type[SQLModel]) -> Tuple[InstrumentedAttribute, ...]:
+def model_primary_keys_fields(model: type[SQLModel]) -> tuple[InstrumentedAttribute, ...]:
     # __table__ is added by SQLAlchemy on mapped (table=True) SQLModels at class
     # creation time; not declared on the SQLModel stub itself.
-    columns: List[ReadOnlyColumnCollection] = model.__table__.primary_key.columns  # type: ignore[attr-defined]
+    columns: list[ReadOnlyColumnCollection] = model.__table__.primary_key.columns  # type: ignore[attr-defined]
     return tuple(getattr(model, column.name) for column in columns)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -152,7 +152,7 @@ async def test_list_with_sorting_and_filter(
     caplog: LogCaptureFixture,
     my_repository: MyRepository,
     limit: int,
-    sorting: Tuple[str, str],
+    sorting: tuple[str, str],
     filtering: TSQLModel,
     expected: list[int],
 ):

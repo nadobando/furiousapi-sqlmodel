@@ -49,7 +49,7 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture(scope="session")
-def postgres_urls() -> "Iterator[tuple[str, str]]":
+def postgres_urls() -> Iterator[tuple[str, str]]:
     """Spin up a Postgres testcontainer; yield (async_url, sync_url)."""
     with PostgresContainer("postgres:16") as container:
         # Default URL from testcontainers looks like
@@ -62,7 +62,7 @@ def postgres_urls() -> "Iterator[tuple[str, str]]":
 
 
 @pytest.fixture(scope="session")
-def app(postgres_urls: tuple[str, str]) -> "FastAPI":
+def app(postgres_urls: tuple[str, str]) -> FastAPI:
     """The example FastAPI app wired to the Postgres testcontainer."""
     async_url, sync_url = postgres_urls
     from example import config
@@ -80,7 +80,7 @@ def app(postgres_urls: tuple[str, str]) -> "FastAPI":
 
 
 @pytest.fixture(scope="session")
-def client(app: "FastAPI") -> "Iterator[TestClient]":
+def client(app: FastAPI) -> Iterator[TestClient]:
     with TestClient(app) as c:
         yield c
 

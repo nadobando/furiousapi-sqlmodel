@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional
 
 from sqlmodel import SQLModel, Field, Relationship
 
@@ -8,7 +8,7 @@ class BaseReview(SQLModel):
 
 
 class Review(BaseReview, table=True):  # type: ignore[call-arg]
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     item_id: int = Field(foreign_key="item.id")
     item: Optional["Item"] = Relationship(back_populates="reviews", sa_relationship_kwargs={"uselist": False})
 
@@ -31,8 +31,8 @@ class BaseItem(SQLModel):
 
 
 class Item(BaseItem, table=True):  # type: ignore[call-arg]
-    id: Optional[int] = Field(default=None, primary_key=True)
-    reviews: Optional[List["Review"]] = Relationship(back_populates="item", sa_relationship_kwargs={"uselist": True})
+    id: int | None = Field(default=None, primary_key=True)
+    reviews: list["Review"] | None = Relationship(back_populates="item", sa_relationship_kwargs={"uselist": True})
 
 
 class ItemCreate(BaseItem):
@@ -41,4 +41,4 @@ class ItemCreate(BaseItem):
 
 class ItemRead(BaseItem):
     id: int
-    reviews: Optional[List[ReviewItemRead]]
+    reviews: list[ReviewItemRead] | None

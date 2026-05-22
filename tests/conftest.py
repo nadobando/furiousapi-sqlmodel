@@ -3,7 +3,8 @@ import contextlib
 import sys
 import traceback
 from datetime import datetime
-from typing import AsyncGenerator, Callable, Annotated, TextIO
+from typing import Annotated, TextIO
+from collections.abc import AsyncGenerator, Callable
 
 import pytest
 import pytest_asyncio

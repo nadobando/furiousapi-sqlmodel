@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Type, cast
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 from furiousapi.db.metaclasses import model_query
 from furiousapi.db.models import FuriousPydanticConfig
@@ -16,20 +16,20 @@ if TYPE_CHECKING:
 
 
 class SQLAllOptionalMeta(SQLModelMetaclass):
-    def __new__(mcs, name: str, bases: Tuple[type], namespaces: Dict[str, Any], **kwargs) -> Any:
+    def __new__(mcs, name: str, bases: tuple[type], namespaces: dict[str, Any], **kwargs) -> Any:
         for base in bases:
             if issubclass(base, SQLModel):
-                model_fields: Dict[str, Any]
+                model_fields: dict[str, Any]
                 if PYDANTIC_V2:
                     model_fields = base.model_fields
                 else:
                     # In v1 mode this is a Dict[str, ModelField]; v2 stubs see
                     # __fields__ as a deprecated method, so widen with cast.
-                    model_fields = cast("Dict[str, Any]", base.__fields__)
+                    model_fields = cast("dict[str, Any]", base.__fields__)
                 for k, v in list(model_fields.items()):
                     v: ModelField
                     v.default = None
-                    v.annotation = Optional[v.annotation]
+                    v.annotation = Optional[v.annotation]  # noqa: UP007,UP045
                     namespaces.update({k: v})
 
         mcs._convert_sqlmodel(name, namespaces, bases)
@@ -50,7 +50,7 @@ class SQLAllOptionalMeta(SQLModelMetaclass):
 
         for field in annotations:
             if not (field.startswith("__") or field == "metadata"):
-                annotations[field] = Optional[annotations[field]]
+                annotations[field] = Optional[annotations[field]]  # noqa: UP007,UP045
 
         namespaces["__annotations__"] = annotations
 
@@ -63,5 +63,5 @@ class FuriousSQLModel(SQLModel):
         class Config(FuriousPydanticConfig): ...
 
 
-def sql_model_query(model: Type[BaseModel]) -> Depends:
+def sql_model_query(model: type[BaseModel]) -> Depends:
     return model_query(model, SQLModelMetaclass)

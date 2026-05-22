@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import List, Union, Tuple, Optional, Type
 from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import InstrumentedAttribute, RelationshipProperty
@@ -15,13 +14,13 @@ def is_relationship(field: InstrumentedAttribute) -> bool:
     return isinstance(field.comparator, RelationshipProperty.Comparator)
 
 
-def get_relation(field: InstrumentedAttribute) -> Type[SQLModel]:
+def get_relation(field: InstrumentedAttribute) -> type[SQLModel]:
     if not is_relationship(field):
         raise AssertionError("not a relation")
     return field.prop.mapper.class_
 
 
-def build_field_options(load_fields: List[Union[InstrumentedAttribute, _WildcardLoad]]) -> List[_AbstractLoad]:
+def build_field_options(load_fields: list[InstrumentedAttribute | _WildcardLoad]) -> list[_AbstractLoad]:
     field_groups = defaultdict(list)
     for field in load_fields:
         if isinstance(field, _WildcardLoad):
@@ -31,8 +30,8 @@ def build_field_options(load_fields: List[Union[InstrumentedAttribute, _Wildcard
 
 
 def extract_field_info(
-    nested: Tuple[str, Optional[Tuple[str, ...]]],
-) -> tuple[str, bool, Optional[str], Optional[List[List[str]]]]:
+    nested: tuple[str, tuple[str, ...] | None],
+) -> tuple[str, bool, str | None, list[list[str]] | None]:
     if isinstance(nested, list) and len(nested) > 1:
         return nested[0], True, nested[0], nested[1:]
     return nested[0], False, None, None

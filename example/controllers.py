@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, List, cast
+from typing import cast
 from typing import TYPE_CHECKING
 
 from fastapi import Path, Query
@@ -24,9 +24,7 @@ class ItemController(ModelController, prefix="/item", tags=["Items"]):  # type: 
     get_model = ItemRead
     __filtering__ = ItemRQL
 
-    async def get(
-        self, id_: int = Path(..., alias="id"), fields: Optional[List["TModelFields"]] = Query(None)
-    ) -> ItemRead:
+    async def get(self, id_: int = Path(..., alias="id"), fields: list[TModelFields] | None = Query(None)) -> ItemRead:
         res = await self.repository.get(id_, should_error=True, options=[joinedload(Item.reviews)], fields=fields)
         return ItemRead.model_validate(dump_with_relationships(res))
 

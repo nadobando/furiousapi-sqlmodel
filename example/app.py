@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI
 from furiousapi.api.exception_handling import furious_api_exception_handler, furious_db_exception_handler
